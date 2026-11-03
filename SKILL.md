@@ -70,6 +70,18 @@ Turn explicit shopping targets into RSSHub subscriptions, explain what each sour
 - Never poll faster than the source or RSSHub cache can refresh; wasted requests add rate-limit risk without improving detection.
 - Separate automatic checking from human action: notify only for a target price, abnormal drop, or other explicit trigger, then let the user verify and decide.
 
+## Recurring State And Idempotency
+
+For any recurring monitor, use `scripts/deal-state.ps1` with the default state file `C:\Users\X\.codex\state\shopping-deal-rss-state.json`.
+
+- If `Status` reports that the state does not exist, write the current feed identities with `Initialize` and do not notify those initial items. This establishes a baseline and prevents a first-run alert burst.
+- Build one JSON candidate item per potential lead. Required fields are `source`, `sourceUrl`, `productUrl`, `dealType`, `publishedAt` or `modifiedAt`, `observedAt`, `estimatedFinalPayable`, and `reproductionSteps`. Deal type must describe an information asymmetry such as `price-error`, `coupon-stack`, `hidden-eligibility`, `channel-specific`, `checkout-mismatch`, or `variant-mismatch`.
+- Include the visible offer state that determines whether a later update is materially different: `originalPrice`, `referencePrice`, `couponState`, `quantityCondition`, `variant`, `channel`, and `validUntil` when the source provides them.
+- Run `Evaluate` before every notification. It enforces completeness, source freshness, the 24-hour absolute age limit, normalized identity, and offer-state fingerprints.
+- Call `MarkSent` only after Bark returns success. A failed send must remain eligible for the next run; `MarkSent` is idempotent for an unchanged offer.
+- Do not mark an item sent merely because it was analyzed or rendered in a message. Keep source timestamps distinct from the local observation time.
+- Treat the state file as operational data, not source truth. Use the helper's atomic writes and lock so overlapping heartbeat runs cannot create duplicate sends.
+
 ## Output
 
 Use a concise table or list containing:
@@ -86,7 +98,7 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 
 - Treat notification as event-driven, not as a fixed-interval digest. Push only when a new or materially changed deal passes the information-asymmetry, freshness, completeness, and price checks.
 - Polling and notification are separate: an active Xianbao Cool monitor may check RSS every 30 seconds, but it stays silent when there is no qualifying new item.
-- Deduplicate by product link plus deal state. Do not resend the same product at the same price and coupon state.
+- Use `scripts/deal-state.ps1` to deduplicate by normalized product identity plus deal type and to detect material offer-state changes. Do not resend the same product at the same price and coupon state.
 - When no scheduler/automation is active, this skill does not poll or push in the background; it acts only during an explicit task run.
 - A user request to create ongoing Bark monitoring requires an explicit automation, a declared polling cadence, and a secure way to provide `BARK_URL` without printing or saving the key in the skill.
 
@@ -105,7 +117,8 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - Calculate the gap from the cart's `再实付` or final payable amount after platform/store coupons, not from the list price. Suggest useful, return-eligible consumables or quantity adjustments; do not recommend buying filler solely to return it.
 - If the source only shows a generic cart recommendation instead of a fixed filler SKU, say `凑单商品需在购物车推荐中按再实付差额选择` and include the gap. Do not invent a specific filler product.
 - When screenshots contain the only price breakdown, inspect them before sending. Report only prices visible in the source, and mark an item-level final price as `estimated` when cart-level coupons cannot be allocated to one SKU.
-- URL-encode Bark title and body values. Keep the request HTTPS-only and use a bounded timeout. Do not print or save the Bark key; redact it in reports and logs.
+- Send through `scripts/send_bark.ps1`, which uses HTTPS POST JSON, bounded payload sizes, a bounded timeout, and retries. Do not build a Bark GET URL manually. Do not print or save the Bark key; redact it in reports and logs.
+- Use `send_bark.ps1 -DryRun` for local validation. A dry run reports only payload sizes and the destination host, never the device key.
 - Do not send a notification for an empty search or a failed feed. If no source is reachable, report the failure to the user instead of claiming that no deals exist.
 - If the user supplies only a Bark endpoint but no watch targets, ask for keywords or product links rather than sending broad, noisy alerts. For a requested scheduled monitor, use the automation facility and confirm cadence and trigger thresholds first.
 
