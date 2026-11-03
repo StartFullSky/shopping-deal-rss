@@ -151,19 +151,18 @@ function ConvertTo-DealView {
         $publishedAt
     }
 
-    $identitySource = if ($productUrl) {
-        $productUrl
-    }
-    elseif ($sourceId) {
+    $identitySource = if ($sourceId) {
         "$source/$sourceId"
+    }
+    elseif ($productUrl) {
+        $productUrl
     }
     else {
         $sourceUrl
     }
     $identityText = @(
         ([string]$source).ToLowerInvariant(),
-        ([string]$identitySource).ToLowerInvariant(),
-        $dealType
+        ([string]$identitySource).ToLowerInvariant()
     ) -join "|"
 
     $fingerprintText = @(
@@ -493,6 +492,19 @@ switch ($Action) {
                     offerFingerprint = $view.offerFingerprint
                     reason = $reason
                     details = @()
+                })
+                continue
+            }
+            if ($null -ne $existing -and
+                $existing.status -eq "baseline" -and
+                $view.sourceTimestamp -and
+                $existing.firstSeenAt -and
+                (ConvertTo-Timestamp $view.sourceTimestamp) -le (ConvertTo-Timestamp $existing.firstSeenAt)) {
+                $rejected.Add([ordered]@{
+                    stateKey = $view.stateKey
+                    offerFingerprint = $view.offerFingerprint
+                    reason = "baseline_suppressed"
+                    details = @("enriched_existing_item")
                 })
                 continue
             }

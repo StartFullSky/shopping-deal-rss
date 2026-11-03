@@ -98,7 +98,7 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 
 - Treat notification as event-driven, not as a fixed-interval digest. Push only when a new or materially changed deal passes the information-asymmetry, freshness, completeness, and price checks.
 - Polling and notification are separate: an active Xianbao Cool monitor may check RSS every 30 seconds, but it stays silent when there is no qualifying new item.
-- Use `scripts/deal-state.ps1` to deduplicate by normalized product identity plus deal type and to detect material offer-state changes. Do not resend the same product at the same price and coupon state.
+- Use `scripts/deal-state.ps1` to deduplicate by stable source-item identity, preferring the source ID and falling back to normalized product URL. Detect material changes through the offer-state fingerprint. Do not resend the same product at the same price and coupon state.
 - When no scheduler/automation is active, this skill does not poll or push in the background; it acts only during an explicit task run.
 - A user request to create ongoing Bark monitoring requires an explicit automation, a declared polling cadence, and a secure way to provide `BARK_URL` without printing or saving the key in the skill.
 
