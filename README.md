@@ -20,6 +20,7 @@ the lowest available price.
 - Maintain a local, idempotent monitor state for baseline suppression and
   material-change detection.
 - Send bounded Bark notifications without printing the device key.
+- Run once manually or every 5 minutes through a Windows Scheduled Task.
 
 ## Supported sources
 
@@ -40,7 +41,9 @@ target price or recorded comparison supports that conclusion.
 ## Requirements
 
 - PowerShell 7 or Windows PowerShell 5.1.
-- A reachable RSSHub instance for SMZDM and JD feeds.
+- A reachable RSSHub instance for SMZDM and JD feeds. The public
+  `rsshub.app` instance restricts automated use and is suitable only for
+  on-demand testing; scheduled production feeds should use self-hosted RSSHub.
 - Windows and its current-user DPAPI for the optional Bark sender.
 - An explicit automation if ongoing polling or notifications are required;
   generating a feed URL alone does not create a monitor.
@@ -56,6 +59,36 @@ git clone https://github.com/StartFullSky/shopping-deal-rss.git `
 
 The skill definition is `SKILL.md`; its public interface metadata is in
 `agents/openai.yaml`.
+
+## Scheduled Bark monitor
+
+`scripts/monitor.ps1` is the executable polling pipeline. The default
+configuration watches the Xianbao Cool native RSS feed every 5 minutes, opens a
+small number of recent public detail pages, applies strict information-cue
+rules, and sends only new or materially changed leads. The first run records a
+baseline instead of sending an alert burst.
+
+Inspect the plan without changing state or sending Bark:
+
+```powershell
+pwsh -File scripts/monitor.ps1 -ConfigPath .\monitor-config.json -DryRun
+```
+
+Register or remove the current-user Scheduled Task:
+
+```powershell
+pwsh -File scripts/install-monitor-task.ps1 `
+  -ConfigPath .\monitor-config.json `
+  -IntervalMinutes 5
+
+pwsh -File scripts/install-monitor-task.ps1 -Uninstall
+```
+
+Use `monitor-config.json` to change sources, keyword filters, strict deal cues,
+lookback windows, rate limits, and delivery paths. Generic RSS sources are also
+supported. Add `targetPrice` to a JD/RSSHub source to emit `target-price-met`
+price-watch hits. SMZDM and JD production schedules require a self-hosted
+RSSHub base URL.
 
 ## Feed examples
 
@@ -133,6 +166,8 @@ Required fields are `source`, `sourceUrl`, `productUrl`, `observedAt`,
 - `channel-specific`
 - `checkout-mismatch`
 - `variant-mismatch`
+- `target-price-met`
+- `abnormal-drop`
 
 `Initialize` records the supplied items as the baseline so the first evaluation
 does not send an alert for every existing deal. `Evaluate` only reports new
@@ -227,7 +262,10 @@ policy.
 .
 ├── agents/openai.yaml
 ├── scripts/deal-state.ps1
+├── scripts/install-monitor-task.ps1
+├── scripts/monitor.ps1
 ├── scripts/send_bark.ps1
+├── monitor-config.json
 ├── SKILL.md
 └── README.md
 ```

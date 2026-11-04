@@ -1,0 +1,74 @@
+{
+  "network": {
+    "timeoutSec": 20,
+    "requestDelayMs": 500,
+    "proxyUrl": "",
+    "userAgent": "ShoppingDealRSS/1.0 (+https://github.com/StartFullSky/shopping-deal-rss)"
+  },
+  "monitor": {
+    "intervalMinutes": 5,
+    "maxLookbackMinutes": 720,
+    "maxDetailFetchesPerRun": 8,
+    "maxAlertsPerRun": 5
+  },
+  "delivery": {
+    "barkSecretPath": "%USERPROFILE%\\.codex\\secrets\\shopping-deal-rss-bark.bin",
+    "statePath": "%USERPROFILE%\\.codex\\state\\shopping-deal-rss-state.json",
+    "resultPath": "%USERPROFILE%\\.codex\\state\\shopping-deal-rss-last-run.json"
+  },
+  "rules": {
+    "includeKeywords": [],
+    "excludeKeywords": [],
+    "alwaysKeepPatterns": [
+      "错价|价格错误|标价错误|价格漏洞|漏洞价|白嫖",
+      "叠券|叠加.{0,8}(?:券|补贴|红包)|隐藏入口|受邀",
+      "实付.{0,12}低于|结算.{0,12}低于"
+    ],
+    "excludePatterns": [
+      "今日.{0,6}(?:特价|好价)",
+      "限时.{0,6}(?:特价|秒杀)",
+      "聚划算|团购|拼团"
+    ],
+    "dealTypes": {
+      "price-error": [
+        "错价|价格错误|标价错误|价格漏洞|漏洞价|价格BUG|价格bug|BUG价"
+      ],
+      "zero-price": [
+        "(?<![¥￥\\d.])0(?:\\.0+)?\\s*元(?:购|拍|下单|到手)|零元购|一元购|1元购|白嫖|(?:实付|到手|最终|下单|付款)\\s*0(?:\\.0+)?\\s*元"
+      ],
+      "flash-inventory": [
+        "库存漏洞|库存错误|超卖|无货下单|秒罄"
+      ],
+      "hidden-stack": [
+        "叠券|叠加.{0,8}(?:券|补贴|红包)|(?:券|补贴|红包).{0,8}叠加|凑单.{0,12}(?:券|实付|到手)|支付券.{0,8}叠加"
+      ],
+      "hidden-eligibility": [
+        "隐藏入口|隐藏.{0,8}小程序|仅限.{0,12}(?:地区|账号|会员|学生|新客|老客)|受邀|白号|黑号|特定渠道"
+      ],
+      "channel-specific": [
+        "仅限.{0,12}(?:小程序|APP|线下|门店|地区|渠道)|地区专享|渠道专享"
+      ],
+      "checkout-mismatch": [
+        "结算.{0,12}(?:低于|不一致|价格)|购物车.{0,12}(?:低于|不一致)|实付.{0,12}低于|下单.{0,12}低于"
+      ],
+      "variant-mismatch": [
+        "发错|拍.{0,8}发错|拍.{0,8}(?:实际|收到).{0,8}发|SKU.{0,12}(?:错|bug|不一致)|规格.{0,12}(?:错|bug|不一致)|选项.{0,12}(?:错|bug|不一致)|收到.{0,12}(?:规格|型号|颜色).{0,8}(?:错|不一致)"
+      ],
+      "target-price-met": [
+        "达到目标价|低于目标价|目标价达成"
+      ],
+      "abnormal-drop": [
+        "异常降价|突然降价|历史低价|大幅降价"
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "xianbao",
+      "kind": "xianbao-detail",
+      "url": "https://new.xianbao.fun/rss.php",
+      "enabled": true,
+      "maxLookbackMinutes": 720
+    }
+  ]
+}

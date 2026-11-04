@@ -207,7 +207,8 @@ function ConvertTo-DealView {
 
     $allowedDealTypes = @(
         "price-error", "zero-price", "flash-inventory", "coupon-stack", "hidden-stack",
-        "hidden-eligibility", "channel-specific", "checkout-mismatch", "variant-mismatch"
+        "hidden-eligibility", "channel-specific", "checkout-mismatch", "variant-mismatch",
+        "target-price-met", "abnormal-drop"
     )
     if ($dealType -and $allowedDealTypes -notcontains $dealType) {
         $missing.Add("unsupportedDealType")
