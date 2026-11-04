@@ -64,9 +64,9 @@ The skill definition is `SKILL.md`; its public interface metadata is in
 
 `scripts/monitor.ps1` is the executable polling pipeline. The default
 configuration watches the Xianbao Cool native RSS feed every 5 minutes, opens a
-small number of recent public detail pages, applies strict information-cue
-rules, and sends only new or materially changed leads. The first run records a
-baseline instead of sending an alert burst.
+small number of recent public detail pages, applies strict anomaly and
+reproducible coupon-stack rules, and sends only new or materially changed leads.
+The first run records a baseline instead of sending an alert burst.
 
 Inspect the plan without changing state or sending Bark:
 

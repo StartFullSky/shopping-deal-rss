@@ -84,7 +84,7 @@ For any recurring monitor, use `scripts/deal-state.ps1` with the default state f
 ## Automated Monitoring
 
 - `scripts/monitor.ps1` executes one polling cycle. It fetches configured RSS/Atom sources, enriches allowed Xianbao public detail pages, applies keyword and information-cue filters, evaluates candidates through `deal-state.ps1`, sends qualified leads with `send_bark.ps1`, and marks only successful deliveries.
-- `monitor-config.json` defaults to Xianbao Cool every 5 minutes with strict price-error, zero-price, hidden-stack, hidden-eligibility, checkout-mismatch, variant-mismatch, and similar anomaly cues. Ordinary public flash sales remain excluded.
+- `monitor-config.json` defaults to Xianbao Cool every 5 minutes with strict price-error, zero-price, coupon-stack, hidden-stack, hidden-eligibility, checkout-mismatch, variant-mismatch, and similar actionable cues. Reproducible coupon stacks are eligible; ordinary one-coupon promotions and public flash sales remain excluded.
 - The first monitor run initializes a baseline and sends nothing for existing items. Later runs send only new identities or material offer-state changes, with a configurable maximum alerts-per-run.
 - `scripts/install-monitor-task.ps1` registers a current-user Windows Scheduled Task with missed-run recovery and a 10-minute execution limit. It launches monitoring through `wscript.exe` so PowerShell does not flash a console window. Scheduled intervals cannot be configured below 5 minutes.
 - For JD target-price monitoring, add a source with `targetPrice`. A hit is a price-watch event, not evidence of an information advantage. SMZDM and JD scheduled feeds require a self-hosted RSSHub endpoint.

@@ -703,6 +703,7 @@ function Get-DealTypeLabel {
         "price-error" { return "速度bug❗" }
         "zero-price" { return "零元bug❗" }
         "flash-inventory" { return "库存bug❗" }
+        "coupon-stack" { return "叠券好价❗" }
         "hidden-stack" { return "叠券bug❗" }
         "hidden-eligibility" { return "隐藏入口❗" }
         "channel-specific" { return "渠道专享❗" }
