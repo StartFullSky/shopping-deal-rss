@@ -690,66 +690,92 @@ function Invoke-DealStateAction {
     }
 }
 
+function Get-DealTypeLabel {
+    param([string]$DealType)
+    switch ($DealType) {
+        "price-error" { return "速度bug❗" }
+        "zero-price" { return "零元bug❗" }
+        "flash-inventory" { return "库存bug❗" }
+        "hidden-stack" { return "叠券bug❗" }
+        "hidden-eligibility" { return "隐藏入口❗" }
+        "channel-specific" { return "渠道专享❗" }
+        "checkout-mismatch" { return "结算bug❗" }
+        "variant-mismatch" { return "拍发bug❗" }
+        "target-price-met" { return "到目标价❗" }
+        "abnormal-drop" { return "异常降价❗" }
+        default { return "好价❗" }
+    }
+}
+
+function Test-CompactActionStep {
+    param([string]$Step)
+    $value = ($Step -replace "\s+", " ").Trim()
+    if ($value -match "^[①②③④⑤⑥⑦⑧⑨⑩]\s*|^\d+\s*[.、)]\s*") {
+        return $true
+    }
+    if ($value -match "^(?:https?://|￥|<img>|【?\s*(?:图片|链接))") {
+        return $false
+    }
+    if ($value -match "^[（(].*(?:元|亓).*[）)]$") {
+        return $false
+    }
+    return $value -match "领取|领券|领.{0,8}券|跳到|跳至|进入|进#|加车|加入购物车|下单|拍下|拍卞|改.{0,6}件|退出|复制|打开|点击|结算|付款|凑单|再次"
+}
+
 function New-BarkTitle {
     param($Item)
-    $price = if ($null -ne $Item.estimatedFinalPayable) {
-        "¥{0}" -f ([decimal]$Item.estimatedFinalPayable).ToString("0.##")
+    $sourceTitle = ([string]$Item.title).Trim()
+    $title = "$(Get-DealTypeLabel ([string]$Item.dealType))$sourceTitle"
+    if ($sourceTitle -notmatch "[¥￥]?\d+(?:\.\d+)?\s*(?:元|亓|/斤|/件)" -and $null -ne $Item.estimatedFinalPayable) {
+        $title += "｜到手 ¥$(([decimal]$Item.estimatedFinalPayable).ToString('0.##'))"
     }
-    else {
-        "价格待核"
-    }
-    $title = "$price 到手｜$($Item.title)｜$($Item.dealType)"
     if ($title.Length -gt 128) {
         $title = $title.Substring(0, 128)
     }
     return $title
 }
 
+function Format-CompactStep {
+    param([string]$Step, [int]$Index)
+    $glyphs = @("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩")
+    $value = ($Step -replace "\s+", " ").Trim()
+    if (-not (Test-CompactActionStep $value)) {
+        return $value
+    }
+    if ($value -match "^[①②③④⑤⑥⑦⑧⑨⑩]\s*") {
+        return $value
+    }
+    if ($value -match "^\d+\s*[.、)]\s*(?<content>.+)$") {
+        $value = $Matches["content"].Trim()
+    }
+    $glyph = if ($Index -lt $glyphs.Count) { $glyphs[$Index] } else { "$($Index + 1)." }
+    return "$glyph$value"
+}
+
 function New-BarkBody {
     param($Item)
-    $formatPrice = {
-        param($Value, $Label)
-        if ($null -eq $Value) {
-            return "$Label：not provided by source"
-        }
-        return "$Label：¥$(([decimal]$Value).ToString('0.##'))"
-    }
     $lines = [Collections.Generic.List[string]]::new()
-    $lines.Add("商品/活动链接：$($Item.productUrl)")
-    $lines.Add((& $formatPrice -Value $Item.originalPrice -Label "原价/标价"))
-    $lines.Add((& $formatPrice -Value $Item.referencePrice -Label "近期参考价"))
-    $lines.Add((& $formatPrice -Value $Item.estimatedFinalPayable -Label "预计最终实付"))
-    $lines.Add("优惠状态：$(if ($Item.couponState) { $Item.couponState } else { 'not provided by source' })")
-    $lines.Add("购买条件：$(if ($Item.quantityCondition) { $Item.quantityCondition } else { 'not provided by source' })")
-    $lines.Add("适用规格：$(if ($Item.variant) { $Item.variant } else { 'not provided by source' })")
-    $lines.Add("渠道/资格：$(if ($Item.channel) { $Item.channel } else { 'not provided by source' })")
-    $lines.Add("有效期：$(if ($Item.validUntil) { $Item.validUntil } else { 'not provided by source' })")
-    $sourceTime = if ($Item.modifiedAt) { $Item.modifiedAt } else { $Item.publishedAt }
-    $lines.Add("来源时间：$sourceTime")
-    $lines.Add("观测时间：$($Item.observedAt)")
-    $lines.Add("线索类型：$($Item.dealType)")
-    $lines.Add("筛选证据：$($Item.evidence)")
-    $lines.Add("复现步骤：")
-    $index = 1
-    foreach ($step in @($Item.reproductionSteps)) {
-        $lines.Add("$index. $step")
-        $index++
+    $lines.Add("——————")
+    $steps = @($Item.reproductionSteps | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    if ($steps.Count -eq 0) {
+        $steps = @([string]$Item.title)
     }
-    $extraLinks = @($Item.allLinks | Where-Object { $_ -ne $Item.productUrl } | Select-Object -Unique | Select-Object -First 3)
-    if ($extraLinks.Count -gt 0) {
-        $lines.Add("其他活动入口：")
-        foreach ($link in $extraLinks) {
-            $lines.Add($link)
+    $index = 0
+    foreach ($step in $steps) {
+        $lines.Add((Format-CompactStep ([string]$step) $index))
+        if (Test-CompactActionStep ([string]$step)) {
+            $index++
         }
     }
-    $lines.Add("来源：$($Item.sourceUrl)")
-    $sourceNature = if ($Item.sourceKind -eq "xianbao-detail") {
-        "线报酷社区报告，未独立核验"
+    $body = $lines -join "`n"
+    if ($Item.productUrl -and $body.IndexOf([string]$Item.productUrl, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        $lines.Add("商品 $($Item.productUrl)")
     }
-    else {
-        "RSS 来源报告，未独立核验"
+    if ($Item.sourceUrl -and $body.IndexOf([string]$Item.sourceUrl, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        $sourceTime = if ($Item.modifiedAt) { $Item.modifiedAt } else { $Item.publishedAt }
+        $sourceNature = if ($Item.sourceKind -eq "xianbao-detail") { "线报酷未核验" } else { "RSS未核验" }
+        $lines.Add("来源 $sourceTime｜观测 $($Item.observedAt)｜$sourceNature $($Item.sourceUrl)")
     }
-    $lines.Add("来源性质：$sourceNature")
     $body = $lines -join "`n"
     if ([Text.Encoding]::UTF8.GetByteCount($body) -gt 5800) {
         $body = $body.Substring(0, [Math]::Min($body.Length, 1800)) + "`n…"

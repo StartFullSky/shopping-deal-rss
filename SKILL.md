@@ -116,9 +116,10 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 
 - When the user provides a Bark endpoint or a `BARK_URL` environment variable, use it as the notification channel for qualified deal leads and price-watch hits.
 - Send one compact notification per useful result. Put actionable links first: product link, coupon/activity link, then source link. Do not lead with several lines of promotional copy.
-- Lead the title and first body lines with price: `original/list price`, `recent reference price when available`, `estimated final payable`, and `savings`. Distinguish `list price` from verified historical price; a crossed-out price alone is not proof of a real prior transaction price.
-- Use this compact order: title; product link; coupon/activity link; original/list price; recent reference price; estimated final payable; source time; numbered reproduction steps; source link.
-- Capture these mechanics when the source provides them: coupon name or amount, claim/activity entry URL, membership or account requirements, minimum spend, required quantity, stacking rules, eligible variants, and start/end time. If the source omits a field, write "not provided by source" rather than guessing.
+- Keep the title short and source-led. Prefix the deal cue when needed, for example `速度bug❗`, `叠券bug❗`, or `到目标价❗`, then preserve the product title and unit price.
+- Use this compact order: title; `——————`; numbered reproduction steps with their inline token/links; only essential conditions; one source/time line. Put the unit price or estimated final payable in the title. Omit missing optional fields instead of adding `not provided by source` boilerplate.
+- Add one price-summary line only when the title and source steps do not make the final payable clear. Keep `estimated final payable`, `original/list price` when present, `recent reference price` when present, and `savings` together. Distinguish `list price` from verified historical price; a crossed-out price alone is not proof of a real prior transaction price.
+- Preserve the source's reproducible mechanics and links without rewriting them into long prose. Use compact circled step numbers and keep coupon, quantity, stacking, variant, and channel instructions directly in those steps.
 - For stacking or quantity deals, state the exact cart condition such as `1 item`, `buy 2`, `spend 200`, or `stack platform coupons`; never reduce it to only `coupon required`.
 - For an information-asymmetry lead, include why it is not an ordinary public promotion: `price error`, `hidden stack`, `checkout mismatch`, `regional/channel eligibility`, or `variant mismatch`.
 - Do not send ordinary flash-sale or public group-buy notices to Bark unless the user explicitly asks for them.
