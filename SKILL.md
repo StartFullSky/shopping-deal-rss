@@ -1,6 +1,6 @@
 ---
 name: shopping-deal-rss
-description: Build and run RSS-based shopping deal discovery and price-monitoring workflows with RSSHub, including SMZDM keyword feeds and JD product price feeds. Use for watchlists, RSS feed URLs, on-demand price checks, or alert designs. Do not use for purchasing, coupon claiming, authenticated scraping, bypassing anti-bot controls, or guaranteed lowest-price claims.
+description: Build and run RSS-based shopping deal discovery and price-monitoring workflows with RSSHub and native community RSS, including SMZDM keyword feeds, JD price feeds, Xianbao deal leads, and scheduled Bark alerts. Use for watchlists, feed URLs, on-demand checks, quality filtering, or alert designs. Do not use for purchasing, coupon claiming, authenticated scraping, bypassing anti-bot controls, or guaranteed lowest-price claims.
 ---
 
 # Shopping Deal RSS
@@ -22,7 +22,7 @@ Turn explicit shopping targets into RSSHub subscriptions, explain what each sour
 - Primary fast source: `https://new.xianbao.fun/rss.php`. The native RSS feed contains recent deal titles, categories, publication times, and public article links.
 - Use public article URLs such as `/haodan/{id}.html`, `/weibo/{id}.html`, and other category detail pages to extract the original instructions, coupon entry, stacking sequence, quantity changes, product links, and screenshots referenced by the post.
 - Parse the detail page's Article JSON-LD for `datePublished` and `dateModified`, then use those timestamps for freshness checks. Prefer `dateModified` when it is newer.
-- For active high-priority monitoring, poll the RSS no more often than every 30 seconds and stop or back off on `429`, `503`, or other rate-limit responses. Use every 5 minutes for ordinary discovery. Respect `Cache-Control` and do not bypass caching or rate limits.
+- Poll no faster than the response's `Cache-Control` permits. On 2026-11-04 this feed returned `public, max-age=300`, so 5 minutes is the practical production cadence; faster polling reads the same cache and adds rate-limit risk. Stop or back off on `429`, `503`, or other rate-limit responses.
 - Respect `https://new.xianbao.fun/robots.txt`: use RSS and public detail pages only. Do not fetch `/search`, `/link`, `/smzdm/`, `/category-smzdm/`, or any route disallowed for automated clients.
 - Label source claims as Xianbao Cool community reports unless independently validated. Preserve the article link alongside the direct product link.
 
@@ -42,6 +42,9 @@ Turn explicit shopping targets into RSSHub subscriptions, explain what each sour
 - When normal-price evidence is unavailable, label the result `unverified lead`, include the source's claim, and do not describe it as a confirmed error price.
 - Enforce freshness before notification. Error prices, zero-price loops, and flash inventory are eligible only when the source was posted or updated within 30 minutes. Coupon-stack and channel-specific leads use a 6-hour window. Never push a shopping lead older than 24 hours.
 - If the source has no reliable timestamp, or the link cannot be revalidated at send time, do not push it. It may be mentioned in a research response only when the user asked for historical examples.
+- Use `scripts/deal-quality.ps1` as the quality gate for the executable monitor. Require independent evidence for each deal type, distinguish total payable from unit price, and reject ordinary promotions even when a broad keyword appears.
+- For coupon stacks, require coupon acquisition/use evidence plus stacking, cart, or checkout sequencing and at least two reproducible actions. For variant mismatches, require both fulfillment evidence and a specific wrong-item/SKU/variant result.
+- Engagement counts, hot-list rank, comment volume, and value votes indicate attention rather than a verified price advantage. Never use them alone to certify a deal.
 
 ### JD Price Watching
 
@@ -66,8 +69,8 @@ Turn explicit shopping targets into RSSHub subscriptions, explain what each sour
 
 ### Suggested Cadence
 
-- Use 60 seconds for a small, explicit JD price-watch list and 5 minutes for SMZDM keyword discovery as a practical starting point.
-- Use 5-10 second checks only for a tiny whitelist when the user has an authorized low-latency source that permits that rate. RSSHub public instances and community deal posts cannot guarantee catching a 30-second price error.
+- Use 5 minutes for Xianbao discovery while its RSS advertises `max-age=300`. Use 60 seconds only for a small JD list through an authorized self-hosted RSSHub route whose cache and terms permit it.
+- Use faster checks only when the source explicitly permits them and exposes a shorter cache or event stream. Never use 5-10 second polling against the public RSSHub instance or community pages.
 - Never poll faster than the source or RSSHub cache can refresh; wasted requests add rate-limit risk without improving detection.
 - Separate automatic checking from human action: notify only for a target price, abnormal drop, or other explicit trigger, then let the user verify and decide.
 
@@ -85,10 +88,12 @@ For any recurring monitor, use `scripts/deal-state.ps1` with the default state f
 
 - `scripts/monitor.ps1` executes one polling cycle. It fetches configured RSS/Atom sources, enriches allowed Xianbao public detail pages, applies keyword and information-cue filters, evaluates candidates through `deal-state.ps1`, sends qualified leads with `send_bark.ps1`, and marks only successful deliveries.
 - `monitor-config.json` defaults to Xianbao Cool every 5 minutes with strict price-error, zero-price, coupon-stack, hidden-stack, hidden-eligibility, checkout-mismatch, variant-mismatch, and similar actionable cues. Reproducible coupon stacks are eligible; ordinary one-coupon promotions and public flash sales remain excluded.
+- Candidate detail pages are prioritized by anomaly type and source time before the per-run request budget is spent. Quality scoring and hard evidence gates run before deduplication and delivery; a low-confidence candidate is not sent merely because its title contains a broad cue.
 - The first monitor run initializes a baseline and sends nothing for existing items. Later runs send only new identities or material offer-state changes, with a configurable maximum alerts-per-run.
 - `scripts/install-monitor-task.ps1` registers a current-user Windows Scheduled Task with missed-run recovery and a 10-minute execution limit. It launches monitoring through `wscript.exe` so PowerShell does not flash a console window. Scheduled intervals cannot be configured below 5 minutes.
 - For JD target-price monitoring, add a source with `targetPrice`. A hit is a price-watch event, not evidence of an information advantage. SMZDM and JD scheduled feeds require a self-hosted RSSHub endpoint.
 - Use `monitor.ps1 -DryRun` to inspect candidates and message previews without mutating state or sending Bark. The last run summary is written to the configured `resultPath`.
+- The skill file is instructions and does not execute by itself. `scripts/install-monitor-task.ps1` packages the Windows Scheduled Task; Linux, macOS, containers, GitHub Actions, and Codex-hosted workflows still need their own scheduler.
 - Do not mark an item sent merely because it was analyzed or rendered in a message. Keep source timestamps distinct from the local observation time.
 - Treat the state file as operational data, not source truth. Use the helper's atomic writes and lock so overlapping heartbeat runs cannot create duplicate sends.
 
@@ -125,6 +130,8 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - For an information-asymmetry lead, include why it is not an ordinary public promotion: `price error`, `hidden stack`, `checkout mismatch`, `regional/channel eligibility`, or `variant mismatch`.
 - Do not send ordinary flash-sale or public group-buy notices to Bark unless the user explicitly asks for them.
 - Include the source timestamp and observed-at timestamp in every Bark message. Deduplicate repeated alerts for the same product and unchanged deal state.
+- Set Bark `level=timeSensitive` only for fresh high-confidence anomalies such as price errors, zero-price loops, inventory bugs, or checkout mismatches. Use `active` for other qualified leads and `passive` only when the user explicitly wants low-priority delivery.
+- Attach the source URL as the Bark click target and use a stable group such as `shopping-deals`. Do not use `critical` by default.
 - When a deal needs cart stacking, add a reproducible filler plan: current eligible subtotal, target threshold, payable gap, recommended gap tolerance (usually +/- 5), and the exact `凑单`/`领券结算` entry to use.
 - Calculate the gap from the cart's `再实付` or final payable amount after platform/store coupons, not from the list price. Suggest useful, return-eligible consumables or quantity adjustments; do not recommend buying filler solely to return it.
 - If the source only shows a generic cart recommendation instead of a fixed filler SKU, say `凑单商品需在购物车推荐中按再实付差额选择` and include the gap. Do not invent a specific filler product.
@@ -133,6 +140,12 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - Use `send_bark.ps1 -DryRun` for local validation. A dry run reports only payload sizes and the destination host, never the device key.
 - Do not send a notification for an empty search or a failed feed. If no source is reachable, report the failure to the user instead of claiming that no deals exist.
 - If the user supplies only a Bark endpoint but no watch targets, ask for keywords or product links rather than sending broad, noisy alerts. For a requested scheduled monitor, use the automation facility and confirm cadence and trigger thresholds first.
+
+## Market-Informed Operating Rules
+
+- The repository records its GitHub comparison in `research/market-patterns.md`. Reuse the architectural lessons there, not third-party credentials, private APIs, anti-bot workarounds, or purchasing automation.
+- Favor bounded incremental scans, persistent identity/fingerprint state, cold-start suppression, immediate event delivery, and late rechecks over a single large batch.
+- Keep quality decisions explainable. Optional semantic or LLM filters may improve recall/precision later, but they must be disabled by default and must not replace source evidence.
 
 ## Safety And Scope
 

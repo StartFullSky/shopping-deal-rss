@@ -15,12 +15,19 @@ the lowest available price.
 - Use the Xianbao Cool native RSS feed for recent community deal reports.
 - Apply freshness, completeness, and information-asymmetry rules before
   notifying.
+- Prioritize anomaly candidates before spending the detail-request budget,
+  then apply independent-evidence gates and a 0-100 quality score.
+- Parse total payable separately from unit price, including `元` and `亓`
+  expressions such as `共16斤21亓` and `1.3亓/斤`.
 - Keep source links, product links, timestamps, coupon mechanics, and
   reproduction steps together.
 - Maintain a local, idempotent monitor state for baseline suppression and
   material-change detection.
-- Send bounded Bark notifications without printing the device key.
+- Send bounded Bark notifications with `active` or `timeSensitive` priority,
+  a clickable source URL, and no images or device-key logging.
 - Run once manually or every 5 minutes through a Windows Scheduled Task.
+- Record GitHub market research and reusable monitoring patterns in
+  `research/market-patterns.md`.
 
 ## Supported sources
 
@@ -44,7 +51,8 @@ target price or recorded comparison supports that conclusion.
 - A reachable RSSHub instance for SMZDM and JD feeds. The public
   `rsshub.app` instance restricts automated use and is suitable only for
   on-demand testing; scheduled production feeds should use self-hosted RSSHub.
-- Windows and its current-user DPAPI for the optional Bark sender.
+- A Windows DPAPI-protected Bark file or a private `BARK_URL` environment
+  variable for the optional sender.
 - An explicit automation if ongoing polling or notifications are required;
   generating a feed URL alone does not create a monitor.
 
@@ -63,10 +71,11 @@ The skill definition is `SKILL.md`; its public interface metadata is in
 ## Scheduled Bark monitor
 
 `scripts/monitor.ps1` is the executable polling pipeline. The default
-configuration watches the Xianbao Cool native RSS feed every 5 minutes, opens a
-small number of recent public detail pages, applies strict anomaly and
-reproducible coupon-stack rules, and sends only new or materially changed leads.
-The first run records a baseline instead of sending an alert burst.
+configuration watches the Xianbao Cool native RSS feed every 5 minutes,
+prioritizes likely anomalies, opens up to 16 recent public detail pages, applies
+strict evidence and quality rules, and sends up to four new or materially
+changed leads per run. The first run records a baseline instead of sending an
+alert burst.
 
 Inspect the plan without changing state or sending Bark:
 
@@ -89,6 +98,33 @@ lookback windows, rate limits, and delivery paths. Generic RSS sources are also
 supported. Add `targetPrice` to a JD/RSSHub source to emit `target-price-met`
 price-watch hits. SMZDM and JD production schedules require a self-hosted
 RSSHub base URL.
+
+The Xianbao RSS response currently advertises `Cache-Control: public,
+max-age=300`. Five-minute polling is therefore the source-bound production
+cadence; faster polling would read the same cache and increase rate-limit risk.
+
+The Codex skill file is not a scheduler. The installer above packages a Windows
+Task Scheduler job and hides the PowerShell console. Other environments must
+provide their own cron, systemd timer, GitHub Actions schedule, or platform
+automation, then configure a private Bark endpoint and validate with `-DryRun`.
+
+## Quality and latency
+
+`scripts/deal-quality.ps1` keeps fast discovery from becoming noisy delivery:
+
+- Coupon stacks require coupon evidence plus stacking/cart/checkout sequencing
+  and at least two reproducible actions.
+- Variant mismatches require fulfillment evidence and a specific wrong-item,
+  SKU, or variant result; a normal `拍5发150粒` promotion is not an error.
+- Zero-price detection uses standalone zero-price evidence, so `10元` cannot
+  match from the internal `0元` substring.
+- Total payable takes precedence over unit price, while unit-only leads remain
+  labeled by their unit instead of being shown as a total checkout price.
+- Fresh high-confidence anomalies use Bark `timeSensitive`; other qualified
+  leads use `active`.
+
+See `research/market-patterns.md` for the GitHub projects compared and the
+speed/push/accuracy patterns adopted or intentionally rejected.
 
 ## Feed examples
 
@@ -204,8 +240,9 @@ parsing human-oriented text.
 
 `scripts/send_bark.ps1` sends one HTTPS JSON `POST` to Bark, validates the
 endpoint and payload, applies a bounded timeout, and retries a failed request up
-to three times. Always pass an explicit `-SecretPath` outside this author's
-machine.
+to three times. It accepts `level`, click `url`, and notification `group`
+fields. Outside this author's machine, pass an explicit `-SecretPath` or provide
+a private `BARK_URL` environment variable.
 
 The script expects a Windows DPAPI-encrypted UTF-8 Bark endpoint file. After
 setting `BARK_URL` securely in the current session, create the protected file
@@ -236,6 +273,8 @@ pwsh -File scripts/send_bark.ps1 `
   -SecretPath "$env:USERPROFILE\.codex\secrets\shopping-deal-rss-bark.bin" `
   -Title 'Deal test' `
   -Body 'Dry-run payload validation only.' `
+  -Level active `
+  -Url 'https://example.com' `
   -DryRun
 ```
 
@@ -262,10 +301,13 @@ policy.
 .
 ├── agents/openai.yaml
 ├── scripts/deal-state.ps1
+├── scripts/deal-quality.ps1
 ├── scripts/install-monitor-task.ps1
 ├── scripts/monitor-hidden.vbs
 ├── scripts/monitor.ps1
 ├── scripts/send_bark.ps1
+├── tests/deal-quality.tests.ps1
+├── research/market-patterns.md
 ├── monitor-config.json
 ├── SKILL.md
 └── README.md

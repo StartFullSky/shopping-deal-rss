@@ -6,6 +6,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "deal-quality.ps1")
 
 function Get-PropertyValue {
     param($InputObject, [string[]]$Names, $Default = $null)
@@ -374,18 +375,7 @@ function Get-PriceAfterLabels {
 
 function Get-FinalPayable {
     param([string]$Text, [string]$Title)
-    $value = Get-PriceAfterLabels $Text @(
-        "到手价", "到手", "实付价", "实付", "券后价", "券后", "凑后价", "凑后",
-        "最终实付", "最终到手", "最终价", "低至", "每件"
-    )
-    if ($null -ne $value) {
-        return $value
-    }
-    $matches = [regex]::Matches($Title, "(?<price>\d+(?:\.\d{1,2})?)\s*元")
-    if ($matches.Count -gt 0) {
-        return [decimal]$matches[$matches.Count - 1].Groups["price"].Value
-    }
-    return $null
+    return (Get-DealPriceInfo $Text $Title).estimatedFinalPayable
 }
 
 function Get-CurrentPrice {
@@ -507,6 +497,8 @@ function New-DealItem {
         $Detail,
         [string]$DealType,
         [decimal]$EstimatedFinalPayable,
+        $PriceInfo,
+        $Quality,
         [string]$Evidence,
         [DateTimeOffset]$ObservedAt
     )
@@ -545,6 +537,9 @@ function New-DealItem {
         originalPrice = $originalPrice
         referencePrice = $referencePrice
         estimatedFinalPayable = $EstimatedFinalPayable
+        priceBasis = [string]$PriceInfo.priceBasis
+        unitPrice = $PriceInfo.unitPrice
+        priceUnit = [string]$PriceInfo.unit
         couponState = Get-MatchingLine $combinedText "券|补贴|红包|Plus|满减"
         quantityCondition = Get-QuantityCondition $combinedText
         variant = Get-Variant $combinedText
@@ -554,6 +549,11 @@ function New-DealItem {
         evidence = $Evidence
         allLinks = @($links | Select-Object -Unique | Select-Object -First 8)
         sourceKind = [string](Get-PropertyValue $Source @("kind") "rss")
+        qualityScore = [double]$Quality.score
+        qualityConfidence = [string]$Quality.confidence
+        qualityReasons = @($Quality.reasons)
+        riskFlags = @($Quality.riskFlags)
+        urgency = [string]$Quality.urgency
     }
 }
 
@@ -562,6 +562,7 @@ function Get-SourceCandidates {
     $rules = Get-PropertyValue $Config @("rules") $null
     $monitor = Get-PropertyValue $Config @("monitor") $null
     $network = Get-PropertyValue $Config @("network") $null
+    $qualityConfig = Get-PropertyValue $Config @("quality") $null
     $url = [string](Get-PropertyValue $Source @("url") "")
     if ([string]::IsNullOrWhiteSpace($url)) {
         throw "Source URL is required."
@@ -576,9 +577,10 @@ function Get-SourceCandidates {
     $alwaysKeepPatterns = Get-ArrayValue $rules "alwaysKeepPatterns"
     $excludePatterns = Get-ArrayValue $rules "excludePatterns"
     $kind = [string](Get-PropertyValue $Source @("kind") "rss")
+    $qualityMinScore = [double](Get-PropertyValue $qualityConfig @("minScore") 72)
     $detailFetches = 0
     Write-Verbose "Source $(Get-PropertyValue $Source @('id') '') returned $(@($feedItems).Count) feed items."
-    $candidates = foreach ($feedItem in $feedItems) {
+    $preparedItems = foreach ($feedItem in $feedItems) {
         $sourceTimestamp = ConvertTo-DateTimeOffset ([string](Get-PropertyValue $FeedItem @("ModifiedAt") ""))
         if ($null -eq $sourceTimestamp) {
             $sourceTimestamp = ConvertTo-DateTimeOffset ([string](Get-PropertyValue $FeedItem @("PublishedAt") ""))
@@ -592,6 +594,33 @@ function Get-SourceCandidates {
             Write-Verbose "Skipping keyword-filtered feed item: $($FeedItem.Title)"
             continue
         }
+        $preliminaryDealType = Get-DealType $preliminaryText $rules
+        $preliminaryAlwaysKeep = Test-AnyPattern $preliminaryText $alwaysKeepPatterns
+        $priority = 0
+        if (@("price-error", "zero-price", "flash-inventory", "checkout-mismatch") -contains $preliminaryDealType) {
+            $priority = 300
+        }
+        elseif ($preliminaryDealType) {
+            $priority = 200
+        }
+        elseif ($preliminaryAlwaysKeep) {
+            $priority = 150
+        }
+        elseif (@($includeKeywords).Count -gt 0) {
+            $priority = 100
+        }
+        [pscustomobject]@{
+            FeedItem = $FeedItem
+            SourceTimestamp = $sourceTimestamp
+            Priority = $priority
+        }
+    }
+    $orderedItems = @($preparedItems | Sort-Object `
+        @{ Expression = "Priority"; Descending = $true }, `
+        @{ Expression = "SourceTimestamp"; Descending = $true })
+    $candidates = foreach ($preparedItem in $orderedItems) {
+        $FeedItem = $preparedItem.FeedItem
+        $sourceTimestamp = $preparedItem.SourceTimestamp
         $detail = [pscustomobject]@{
             ContentText = [string]$FeedItem.Description
             ReproductionSteps = @((ConvertFrom-HtmlText ([string]$FeedItem.Description)).Trim() | Where-Object { $_ })
@@ -623,13 +652,13 @@ function Get-SourceCandidates {
             continue
         }
         $dealType = Get-DealType $combinedText $rules
-        $estimatedFinalPayable = Get-FinalPayable $combinedText ([string]$FeedItem.Title)
         $targetPrice = Get-PropertyValue $Source @("targetPrice") $null
+        $targetPriceMet = $false
         if ($null -ne $targetPrice) {
             $currentPrice = Get-CurrentPrice $combinedText
             if ($null -ne $currentPrice -and [decimal]$currentPrice -le [decimal]$targetPrice) {
                 $dealType = "target-price-met"
-                $estimatedFinalPayable = $currentPrice
+                $targetPriceMet = $true
             }
         }
         if ([string]::IsNullOrWhiteSpace([string]$dealType)) {
@@ -641,8 +670,38 @@ function Get-SourceCandidates {
             Write-Verbose "Skipping ordinary promotion: $($FeedItem.Title)"
             continue
         }
+        $priceInfo = Get-DealPriceInfo $combinedText ([string]$FeedItem.Title)
+        if ($targetPriceMet) {
+            $currentPrice = Get-CurrentPrice $combinedText
+            $priceInfo = [pscustomobject]@{
+                estimatedFinalPayable = [decimal]$currentPrice
+                unitPrice = $priceInfo.unitPrice
+                unit = $priceInfo.unit
+                priceBasis = "total"
+            }
+        }
+        $estimatedFinalPayable = $priceInfo.estimatedFinalPayable
         if ($null -eq $estimatedFinalPayable) {
             Write-Verbose "Skipping item without an explicit payable price: $($FeedItem.Title)"
+            continue
+        }
+        $sourceAgeMinutes = if ($null -ne $sourceTimestamp) {
+            [Math]::Max(0, ($Now - $sourceTimestamp).TotalMinutes)
+        }
+        else {
+            9999
+        }
+        $quality = Get-DealQualityAssessment `
+            -Text $combinedText `
+            -Title ([string]$FeedItem.Title) `
+            -DealType ([string]$dealType) `
+            -PriceInfo $priceInfo `
+            -ReproductionSteps @($detail.ReproductionSteps) `
+            -ProductUrl (Get-BestProductLink @($detail.Links) ([string]$FeedItem.Link)) `
+            -SourceAgeMinutes $sourceAgeMinutes `
+            -MinScore $qualityMinScore
+        if (-not $quality.qualified) {
+            Write-Verbose "Skipping low-confidence $($dealType) item: $($FeedItem.Title) score=$($quality.score)"
             continue
         }
         $cueMatch = Get-FirstPatternMatch $combinedText @(
@@ -653,7 +712,7 @@ function Get-SourceCandidates {
             $evidence = "Source feed explicitly reported this deal type."
         }
         Write-Verbose "Qualified $dealType item: $($FeedItem.Title)"
-        $item = New-DealItem $Source $FeedItem $detail ([string]$dealType) ([decimal]$estimatedFinalPayable) $evidence $Now
+        $item = New-DealItem $Source $FeedItem $detail ([string]$dealType) ([decimal]$estimatedFinalPayable) $priceInfo $quality $evidence $Now
         if ($dealType -eq "target-price-met" -and $null -ne $targetPrice) {
             $item.referencePrice = [decimal]$targetPrice
         }
@@ -743,6 +802,25 @@ function New-BarkTitle {
     return $title
 }
 
+function Get-BarkLevel {
+    param($Item)
+    switch ([string]$Item.urgency) {
+        "critical" { return "critical" }
+        "timeSensitive" { return "timeSensitive" }
+        "passive" { return "passive" }
+        default { return "active" }
+    }
+}
+
+function Format-CompactTimestamp {
+    param([string]$Value)
+    $parsed = ConvertTo-DateTimeOffset $Value
+    if ($null -eq $parsed) {
+        return [string]$Value
+    }
+    return $parsed.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+}
+
 function Format-CompactStep {
     param([string]$Step, [int]$Index)
     $glyphs = @("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩")
@@ -787,7 +865,7 @@ function New-BarkBody {
     if ($Item.sourceUrl -and $body.IndexOf([string]$Item.sourceUrl, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
         $sourceTime = if ($Item.modifiedAt) { $Item.modifiedAt } else { $Item.publishedAt }
         $sourceNature = if ($Item.sourceKind -eq "xianbao-detail") { "线报酷未核验" } else { "RSS未核验" }
-        $lines.Add("来源 $sourceTime｜观测 $($Item.observedAt)｜$sourceNature $($Item.sourceUrl)")
+        $lines.Add("来源 $(Format-CompactTimestamp $sourceTime)｜观测 $(Format-CompactTimestamp $Item.observedAt)｜$sourceNature $($Item.sourceUrl)")
     }
     $body = $lines -join "`n"
     if ([Text.Encoding]::UTF8.GetByteCount($body) -gt 5800) {
@@ -906,6 +984,7 @@ try {
                 stateKey = $stateKey
                 title = New-BarkTitle $candidate
                 body = New-BarkBody $candidate
+                level = Get-BarkLevel $candidate
             }
             $alertCount++
             continue
@@ -914,7 +993,9 @@ try {
             & $sendBarkScript `
                 -SecretPath $barkSecretPath `
                 -Title (New-BarkTitle $candidate) `
-                -Body (New-BarkBody $candidate) | Out-Null
+                -Body (New-BarkBody $candidate) `
+                -Level (Get-BarkLevel $candidate) `
+                -Url ([string]$candidate.sourceUrl) | Out-Null
             $markResult = Invoke-DealStateAction "MarkSent" $statePath @() $candidate $dealStateScript
             $sent.Add([ordered]@{
                 stateKey = $stateKey

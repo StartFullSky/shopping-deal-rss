@@ -3,13 +3,16 @@
     "timeoutSec": 20,
     "requestDelayMs": 500,
     "proxyUrl": "",
-    "userAgent": "ShoppingDealRSS/1.0 (+https://github.com/StartFullSky/shopping-deal-rss)"
+    "userAgent": "ShoppingDealRSS/1.1 (+https://github.com/StartFullSky/shopping-deal-rss)"
   },
   "monitor": {
     "intervalMinutes": 5,
-    "maxLookbackMinutes": 720,
-    "maxDetailFetchesPerRun": 8,
-    "maxAlertsPerRun": 2
+    "maxLookbackMinutes": 180,
+    "maxDetailFetchesPerRun": 16,
+    "maxAlertsPerRun": 4
+  },
+  "quality": {
+    "minScore": 72
   },
   "delivery": {
     "barkSecretPath": "%USERPROFILE%\\.codex\\secrets\\shopping-deal-rss-bark.bin",
@@ -34,7 +37,7 @@
         "错价|价格错误|标价错误|价格漏洞|漏洞价|价格BUG|价格bug|BUG价"
       ],
       "zero-price": [
-        "(?<![¥￥\\d.])0(?:\\.0+)?\\s*元(?:购|拍|下单|到手)|零元购|一元购|1元购|白嫖|(?:实付|到手|最终|下单|付款)\\s*0(?:\\.0+)?\\s*元"
+        "(?<![¥￥\\d.])0(?:\\.0+)?\\s*(?:元|亓)(?:购|拍|下单|到手)|零元购|一元购|1元购|白嫖|(?:实付|到手|最终|下单|付款)\\s*0(?:\\.0+)?\\s*(?:元|亓)"
       ],
       "flash-inventory": [
         "库存漏洞|库存错误|超卖|无货下单|秒罄"
@@ -55,13 +58,13 @@
         "结算.{0,12}(?:低于|不一致|价格)|购物车.{0,12}(?:低于|不一致)|实付.{0,12}低于|下单.{0,12}低于"
       ],
       "variant-mismatch": [
-        "发错|拍.{0,8}发错|拍.{0,8}(?:实际|收到).{0,8}发|SKU.{0,12}(?:错|bug|不一致)|规格.{0,12}(?:错|bug|不一致)|选项.{0,12}(?:错|bug|不一致)|收到.{0,12}(?:规格|型号|颜色).{0,8}(?:错|不一致)"
+        "发错|(?:拍|购|下)\\s*\\d+\\s*(?:件|个|盒|瓶|双)?.{0,16}(?:实际|收到|实发).{0,12}(?:发|货).{0,12}(?:错|不一致)|SKU.{0,12}(?:错|bug|不一致)|规格.{0,12}(?:错|bug|不一致)|选项.{0,12}(?:错|bug|不一致)|收到.{0,12}(?:规格|型号|颜色).{0,8}(?:错|不一致)"
       ],
       "target-price-met": [
         "达到目标价|低于目标价|目标价达成"
       ],
       "abnormal-drop": [
-        "异常降价|突然降价|历史低价|大幅降价"
+        "异常降价|突然降价"
       ]
     }
   },

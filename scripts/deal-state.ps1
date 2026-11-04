@@ -169,6 +169,9 @@ function ConvertTo-DealView {
         ([string]$identitySource).ToLowerInvariant(),
         $dealType,
         (Get-CanonicalText (Get-TextValue $Item @("estimatedFinalPayable", "estimated_final_payable", "finalPayable"))),
+        (Get-CanonicalText (Get-TextValue $Item @("priceBasis", "price_basis"))),
+        (Get-CanonicalText (Get-TextValue $Item @("unitPrice", "unit_price"))),
+        (Get-CanonicalText (Get-TextValue $Item @("priceUnit", "price_unit"))),
         (Get-CanonicalText (Get-TextValue $Item @("originalPrice", "original_price", "listPrice"))),
         (Get-CanonicalText (Get-TextValue $Item @("referencePrice", "reference_price"))),
         (Get-CanonicalText (Get-TextValue $Item @("couponState", "coupon_state"))),
@@ -245,12 +248,19 @@ function ConvertTo-DealView {
         originalPrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("originalPrice", "original_price", "listPrice"))
         referencePrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("referencePrice", "reference_price"))
         estimatedFinalPayable = $estimatedFinalPayable
+        priceBasis = Get-TextValue $Item @("priceBasis", "price_basis")
+        unitPrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("unitPrice", "unit_price"))
+        priceUnit = Get-TextValue $Item @("priceUnit", "price_unit")
         couponState = Get-TextValue $Item @("couponState", "coupon_state")
         quantityCondition = Get-TextValue $Item @("quantityCondition", "quantity_condition")
         variant = Get-TextValue $Item @("variant", "sku")
         channel = Get-TextValue $Item @("channel", "eligibility")
         validUntil = Get-TextValue $Item @("validUntil", "valid_until")
         reproductionSteps = $reproductionSteps
+        qualityScore = ConvertTo-InvariantNumber (Get-TextValue $Item @("qualityScore", "quality_score"))
+        qualityConfidence = Get-TextValue $Item @("qualityConfidence", "quality_confidence")
+        urgency = Get-TextValue $Item @("urgency")
+        riskFlags = Get-ArrayValue $Item "riskFlags"
         missingFields = @($missing)
     }
 }
@@ -263,7 +273,7 @@ function Read-Items {
     if (-not (Test-Path -LiteralPath $Path)) {
         throw "Items file was not found: $Path"
     }
-    $raw = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    $raw = [IO.File]::ReadAllText($Path, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
     $itemsProperty = $raw.PSObject.Properties["items"]
     $items = if ($null -ne $itemsProperty) { $itemsProperty.Value } else { $raw }
     return @($items)
@@ -274,7 +284,7 @@ function Read-State {
     if (-not (Test-Path -LiteralPath $Path)) {
         return $null
     }
-    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    return [IO.File]::ReadAllText($Path, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
 }
 
 function New-State {
@@ -433,6 +443,11 @@ switch ($Action) {
                     sourceUrl = $view.sourceUrl
                     productUrl = $view.productUrl
                     dealType = $view.dealType
+                    estimatedFinalPayable = $view.estimatedFinalPayable
+                    priceBasis = $view.priceBasis
+                    qualityScore = $view.qualityScore
+                    qualityConfidence = $view.qualityConfidence
+                    urgency = $view.urgency
                     sourceTimestamp = $view.sourceTimestamp
                     firstSeenAt = $now.ToString("o")
                     lastSeenAt = $view.observedAt
@@ -569,6 +584,11 @@ switch ($Action) {
                 sourceUrl = $view.sourceUrl
                 productUrl = $view.productUrl
                 dealType = $view.dealType
+                estimatedFinalPayable = $view.estimatedFinalPayable
+                priceBasis = $view.priceBasis
+                qualityScore = $view.qualityScore
+                qualityConfidence = $view.qualityConfidence
+                urgency = $view.urgency
                 sourceTimestamp = $view.sourceTimestamp
                 firstSeenAt = $firstSeenAt
                 lastSeenAt = $view.observedAt

@@ -1,3 +1,3 @@
 interface:
   display_name: "Shopping Deal RSS"
-  short_description: "Build RSSHub deal-discovery and JD price-watch workflows"
+  short_description: "Build quality-scored RSS deal discovery and price-watch workflows"

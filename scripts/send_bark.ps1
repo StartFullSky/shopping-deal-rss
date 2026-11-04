@@ -8,6 +8,13 @@ param(
 
     [string]$SecretPath = "C:\Users\X\.codex\secrets\shopping-deal-rss-bark.bin",
 
+    [ValidateSet("passive", "active", "timeSensitive", "critical")]
+    [string]$Level = "active",
+
+    [string]$Url = "",
+
+    [string]$Group = "shopping-deals",
+
     [ValidateRange(1, 60)]
     [int]$TimeoutSec = 20,
 
@@ -28,17 +35,29 @@ if ($Title.Length -gt 128) {
 if ([Text.Encoding]::UTF8.GetByteCount($Body) -gt 6000) {
     throw "Body is too large for one Bark notification."
 }
-if (-not (Test-Path -LiteralPath $SecretPath)) {
-    throw "Bark secret file was not found: $SecretPath"
+if (-not [string]::IsNullOrWhiteSpace($Url)) {
+    $Url = $Url.Trim()
+    $linkUri = $null
+    if ($Url.Length -gt 2000 -or -not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$linkUri) -or @("http", "https") -notcontains $linkUri.Scheme.ToLowerInvariant()) {
+        throw "Url must be a valid HTTP(S) URL no longer than 2000 characters."
+    }
 }
 
-$encrypted = [IO.File]::ReadAllBytes($SecretPath)
-$decrypted = [Security.Cryptography.ProtectedData]::Unprotect(
-    $encrypted,
-    $null,
-    [Security.Cryptography.DataProtectionScope]::CurrentUser
-)
-$baseUrl = [Text.Encoding]::UTF8.GetString($decrypted).Trim().TrimEnd("/")
+if (Test-Path -LiteralPath $SecretPath) {
+    $encrypted = [IO.File]::ReadAllBytes($SecretPath)
+    $decrypted = [Security.Cryptography.ProtectedData]::Unprotect(
+        $encrypted,
+        $null,
+        [Security.Cryptography.DataProtectionScope]::CurrentUser
+    )
+    $baseUrl = [Text.Encoding]::UTF8.GetString($decrypted).Trim().TrimEnd("/")
+}
+elseif (-not [string]::IsNullOrWhiteSpace($env:BARK_URL)) {
+    $baseUrl = $env:BARK_URL.Trim().TrimEnd("/")
+}
+else {
+    throw "Bark secret file was not found and BARK_URL is not set."
+}
 $endpoint = [Uri]$baseUrl
 if ($endpoint.Scheme -ne "https" -or $endpoint.Query -or $endpoint.Fragment) {
     throw "The decrypted Bark endpoint must be an HTTPS URL without a query or fragment."
@@ -58,6 +77,11 @@ $payload = [ordered]@{
     device_key = $deviceKey
     title = $Title
     body = $Body
+    level = $Level
+    group = $Group
+}
+if ($Url) {
+    $payload.url = $Url
 }
 $payloadJson = $payload | ConvertTo-Json -Compress
 
@@ -66,6 +90,8 @@ if ($DryRun) {
         status = "dry-run"
         transport = "POST JSON"
         destinationHost = $pushEndpoint.Host
+        level = $Level
+        urlHost = if ($Url) { ([Uri]$Url).Host } else { "" }
         titleCharacters = $Title.Length
         bodyUtf8Bytes = [Text.Encoding]::UTF8.GetByteCount($Body)
     }
@@ -80,12 +106,15 @@ for ($attempt = 1; $attempt -le 3; $attempt++) {
             -ContentType "application/json; charset=utf-8" `
             -Body $payloadJson `
             -TimeoutSec $TimeoutSec
-        $responseCode = $response.PSObject.Properties["code"].Value
+        $codeProperty = $response.PSObject.Properties["code"]
+        $responseCode = if ($null -ne $codeProperty) { $codeProperty.Value } else { $null }
         if ($null -ne $responseCode -and $responseCode -ne 200) {
-            $responseMessage = $response.PSObject.Properties["message"].Value
+            $messageProperty = $response.PSObject.Properties["message"]
+            $responseMessage = if ($null -ne $messageProperty) { $messageProperty.Value } else { "unknown error" }
             throw "Bark returned code ${responseCode}: ${responseMessage}"
         }
-        $timestamp = $response.PSObject.Properties["timestamp"].Value
+        $timestampProperty = $response.PSObject.Properties["timestamp"]
+        $timestamp = if ($null -ne $timestampProperty) { $timestampProperty.Value } else { $null }
         return [pscustomobject]@{
             status = "sent"
             timestamp = $timestamp
