@@ -572,7 +572,7 @@ function Get-SourceCandidates {
     $detailFetches = 0
     Write-Verbose "Source $(Get-PropertyValue $Source @('id') '') returned $(@($feedItems).Count) feed items."
     $candidates = foreach ($feedItem in $feedItems) {
-        $sourceTimestamp = ConvertTo-DateTimeOffset ([string](Get-PropertyValue $FeedItem @("ModifiedAt") "")) 
+        $sourceTimestamp = ConvertTo-DateTimeOffset ([string](Get-PropertyValue $FeedItem @("ModifiedAt") ""))
         if ($null -eq $sourceTimestamp) {
             $sourceTimestamp = ConvertTo-DateTimeOffset ([string](Get-PropertyValue $FeedItem @("PublishedAt") ""))
         }
