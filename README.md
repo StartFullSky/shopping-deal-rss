@@ -263,6 +263,7 @@ policy.
 ├── agents/openai.yaml
 ├── scripts/deal-state.ps1
 ├── scripts/install-monitor-task.ps1
+├── scripts/monitor-hidden.vbs
 ├── scripts/monitor.ps1
 ├── scripts/send_bark.ps1
 ├── monitor-config.json

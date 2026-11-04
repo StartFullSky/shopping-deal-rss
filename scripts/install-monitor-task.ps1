@@ -43,17 +43,10 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
 }
 $resolvedConfigPath = (Resolve-Path -LiteralPath $ConfigPath).Path
 $resolvedMonitorScript = (Resolve-Path -LiteralPath $monitorScript).Path
-$windowsPowerShell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
-$shellPath = if (Test-Path -LiteralPath $windowsPowerShell) {
-    $windowsPowerShell
-}
-elseif ($PSVersionTable.PSEdition -eq "Core") {
-    (Get-Process -Id $PID).Path
-}
-else {
-    (Get-Process -Id $PID).Path
-}
-$arguments = "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$resolvedMonitorScript`" -ConfigPath `"$resolvedConfigPath`""
+$launcherScript = Join-Path $scriptDirectory "monitor-hidden.vbs"
+$resolvedLauncherScript = (Resolve-Path -LiteralPath $launcherScript).Path
+$shellPath = Join-Path $env:SystemRoot "System32\wscript.exe"
+$arguments = "//B //Nologo `"$resolvedLauncherScript`" `"$resolvedMonitorScript`" `"$resolvedConfigPath`""
 $action = New-ScheduledTaskAction -Execute $shellPath -Argument $arguments
 $trigger = New-ScheduledTaskTrigger -Once `
     -At (Get-Date).AddMinutes(1) `
