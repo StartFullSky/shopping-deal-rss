@@ -198,7 +198,9 @@ function ConvertFrom-HtmlText {
     if ([string]::IsNullOrWhiteSpace($Html)) {
         return ""
     }
-    $text = [regex]::Replace($Html, "(?is)<(script|style)\b.*?</\1>", " ")
+    $text = [regex]::Replace($Html, "(?is)<img\b.*?(?:/>|</img>)", " ")
+    $text = [regex]::Replace($text, "(?is)<image\b.*?</image>", " ")
+    $text = [regex]::Replace($text, "(?is)<(script|style)\b.*?</\1>", " ")
     $text = [regex]::Replace($text, "(?i)<br\s*/?>", "`n")
     $text = [regex]::Replace($text, "(?i)</(p|div|li|h[1-6]|tr)>", "`n")
     $text = [regex]::Replace($text, "<[^>]+>", " ")
@@ -278,7 +280,12 @@ function Get-XianbaoDetail {
     $plainText = ConvertFrom-HtmlText $contentHtml
     $lines = @($plainText -split "\r?\n" |
         ForEach-Object { $_.Trim() } |
-        Where-Object { $_ -and $_ -notmatch "版权说明|临时存储|未经核实" } |
+        Where-Object {
+            $_ -and
+            $_ -notmatch "版权说明|临时存储|未经核实" -and
+            $_ -notmatch "^<img>.*</img>$" -and
+            $_ -notmatch "^[a-fA-F0-9]{16,64}$"
+        } |
         Select-Object -Unique)
     return [pscustomobject]@{
         ContentText = $plainText
@@ -756,7 +763,12 @@ function New-BarkBody {
     param($Item)
     $lines = [Collections.Generic.List[string]]::new()
     $lines.Add("——————")
-    $steps = @($Item.reproductionSteps | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $steps = @($Item.reproductionSteps | Where-Object {
+        $value = ([string]$_).Trim()
+        $value -and
+        $value -notmatch "^<img>.*</img>$" -and
+        $value -notmatch "^[a-fA-F0-9]{16,64}$"
+    })
     if ($steps.Count -eq 0) {
         $steps = @([string]$Item.title)
     }
