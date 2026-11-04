@@ -22,7 +22,9 @@ the lowest available price.
 - Keep source links, product links, timestamps, coupon mechanics, and
   reproduction steps together.
 - Maintain a local, idempotent monitor state for baseline suppression and
-  material-change detection.
+  material-change detection, including cross-post content deduplication.
+- Record source-to-detection and detection-to-notification latency so alert
+  speed can be measured rather than inferred from the scheduler setting.
 - Send bounded Bark notifications with `active` or `timeSensitive` priority,
   a clickable source URL, and no images or device-key logging.
 - Run once manually or every 5 minutes through a Windows Scheduled Task.
@@ -207,8 +209,13 @@ Required fields are `source`, `sourceUrl`, `productUrl`, `observedAt`,
 
 `Initialize` records the supplied items as the baseline so the first evaluation
 does not send an alert for every existing deal. `Evaluate` only reports new
-identities or materially changed offer fingerprints. Call `MarkSent` only after
-the notification has actually been delivered.
+identities or materially changed offer fingerprints. It also suppresses the
+same normalized content under another source ID for seven days. Call `MarkSent`
+only after the notification has actually been delivered.
+
+Successful sends record `sourceToDetectionSeconds`, `sourceToNotifySeconds`,
+and `detectionToNotifySeconds`. The monitor run summary reports their average
+and maximum, making source-cache or delivery delays visible.
 
 ### Commands
 
@@ -226,6 +233,11 @@ pwsh -File scripts/deal-state.ps1 -Action Evaluate `
 # Record one successfully delivered item.
 pwsh -File scripts/deal-state.ps1 -Action MarkSent `
   -ItemJson $itemJson `
+  -StatePath .\shopping-deal-rss-state.json
+
+# Alternatively, pass JSON through a UTF-8 file to avoid command-line quoting.
+pwsh -File scripts/deal-state.ps1 -Action MarkSent `
+  -ItemJsonFile .\item.json `
   -StatePath .\shopping-deal-rss-state.json
 
 # Inspect baseline and sent counts.
@@ -307,6 +319,7 @@ policy.
 ├── scripts/monitor.ps1
 ├── scripts/send_bark.ps1
 ├── tests/deal-quality.tests.ps1
+├── tests/deal-state.tests.ps1
 ├── research/market-patterns.md
 ├── monitor-config.json
 ├── SKILL.md

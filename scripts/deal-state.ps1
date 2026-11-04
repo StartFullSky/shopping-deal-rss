@@ -4,7 +4,8 @@ param(
     [string]$Action = "Status",
     [string]$StatePath = "C:\Users\X\.codex\state\shopping-deal-rss-state.json",
     [string]$ItemsFile,
-    [string]$ItemJson
+    [string]$ItemJson,
+    [string]$ItemJsonFile
 )
 
 Set-StrictMode -Version Latest
@@ -181,6 +182,21 @@ function ConvertTo-DealView {
         (Get-CanonicalText (Get-TextValue $Item @("validUntil", "valid_until"))),
         (Get-CanonicalText (Get-ArrayValue $Item "reproductionSteps"))
     ) -join "`n"
+    $contentFingerprintText = @(
+        $dealType,
+        (Get-CanonicalText (Get-TextValue $Item @("title"))),
+        (Get-CanonicalText (Get-TextValue $Item @("estimatedFinalPayable", "estimated_final_payable", "finalPayable"))),
+        (Get-CanonicalText (Get-TextValue $Item @("priceBasis", "price_basis"))),
+        (Get-CanonicalText (Get-TextValue $Item @("couponState", "coupon_state"))),
+        (Get-CanonicalText (Get-TextValue $Item @("quantityCondition", "quantity_condition"))),
+        (Get-CanonicalText (Get-TextValue $Item @("variant", "sku"))),
+        (Get-CanonicalText (Get-TextValue $Item @("channel", "eligibility"))),
+        (Get-CanonicalText (Get-ArrayValue $Item "reproductionSteps"))
+    ) -join "`n"
+    $sourceToDetectionSeconds = $null
+    if ($null -ne $sourceTimestamp -and $null -ne $observedAt -and $observedAt -ge $sourceTimestamp) {
+        $sourceToDetectionSeconds = [Math]::Round(($observedAt - $sourceTimestamp).TotalSeconds, 0)
+    }
 
     $missing = [Collections.Generic.List[string]]::new()
     $requiredValues = [ordered]@{
@@ -235,6 +251,7 @@ function ConvertTo-DealView {
     return [ordered]@{
         stateKey = Get-Sha256 $identityText
         offerFingerprint = Get-Sha256 $fingerprintText
+        contentFingerprint = Get-Sha256 $contentFingerprintText
         source = $source
         sourceId = $sourceId
         sourceUrl = $sourceUrl
@@ -245,6 +262,7 @@ function ConvertTo-DealView {
         modifiedAt = if ($modifiedAt) { $modifiedAt.ToString("o") } else { $null }
         sourceTimestamp = if ($sourceTimestamp) { $sourceTimestamp.ToString("o") } else { $null }
         observedAt = if ($observedAt) { $observedAt.ToString("o") } else { $null }
+        sourceToDetectionSeconds = $sourceToDetectionSeconds
         originalPrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("originalPrice", "original_price", "listPrice"))
         referencePrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("referencePrice", "reference_price"))
         estimatedFinalPayable = $estimatedFinalPayable
@@ -372,6 +390,25 @@ function Get-ItemRecord {
     return $null
 }
 
+function Get-RecentContentDuplicate {
+    param($State, $View, [DateTimeOffset]$Now)
+    foreach ($item in @($State.items)) {
+        $contentFingerprint = Get-TextValue $item @("contentFingerprint")
+        $notifiedAtValue = Get-TextValue $item @("notifiedAt")
+        if ($item.stateKey -eq $View.stateKey -or
+            [string]$contentFingerprint -ne [string]$View.contentFingerprint -or
+            $item.status -ne "sent" -or
+            -not $notifiedAtValue) {
+            continue
+        }
+        $notifiedAt = ConvertTo-Timestamp $notifiedAtValue
+        if ($null -ne $notifiedAt -and ($Now - $notifiedAt).TotalDays -le 7) {
+            return $item
+        }
+    }
+    return $null
+}
+
 function Set-ItemRecord {
     param($State, $Record)
     $items = [Collections.Generic.List[object]]::new()
@@ -438,6 +475,7 @@ switch ($Action) {
                 $record = [ordered]@{
                     stateKey = $view.stateKey
                     offerFingerprint = $view.offerFingerprint
+                    contentFingerprint = $view.contentFingerprint
                     source = $view.source
                     sourceId = $view.sourceId
                     sourceUrl = $view.sourceUrl
@@ -449,6 +487,7 @@ switch ($Action) {
                     qualityConfidence = $view.qualityConfidence
                     urgency = $view.urgency
                     sourceTimestamp = $view.sourceTimestamp
+                    sourceToDetectionSeconds = $view.sourceToDetectionSeconds
                     firstSeenAt = $now.ToString("o")
                     lastSeenAt = $view.observedAt
                     status = "baseline"
@@ -511,6 +550,16 @@ switch ($Action) {
                 })
                 continue
             }
+            $contentDuplicate = Get-RecentContentDuplicate $state $view $now
+            if ($null -ne $contentDuplicate) {
+                $rejected.Add([ordered]@{
+                    stateKey = $view.stateKey
+                    offerFingerprint = $view.offerFingerprint
+                    reason = "duplicate_content"
+                    details = @("duplicateStateKey=$($contentDuplicate.stateKey)")
+                })
+                continue
+            }
             if ($null -ne $existing -and
                 $existing.status -eq "baseline" -and
                 $view.sourceTimestamp -and
@@ -544,8 +593,17 @@ switch ($Action) {
     }
 
     "MarkSent" {
-        if ([string]::IsNullOrWhiteSpace($ItemJson)) {
-            throw "ItemJson is required for MarkSent."
+        if ([string]::IsNullOrWhiteSpace($ItemJson) -and [string]::IsNullOrWhiteSpace($ItemJsonFile)) {
+            throw "ItemJson or ItemJsonFile is required for MarkSent."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($ItemJson) -and -not [string]::IsNullOrWhiteSpace($ItemJsonFile)) {
+            throw "Specify only one of ItemJson or ItemJsonFile."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($ItemJsonFile)) {
+            if (-not (Test-Path -LiteralPath $ItemJsonFile)) {
+                throw "Item JSON file was not found: $ItemJsonFile"
+            }
+            $ItemJson = [IO.File]::ReadAllText($ItemJsonFile, [Text.UTF8Encoding]::new($false))
         }
         $item = $ItemJson | ConvertFrom-Json
         $view = ConvertTo-DealView $item
@@ -579,6 +637,7 @@ switch ($Action) {
             $record = [ordered]@{
                 stateKey = $view.stateKey
                 offerFingerprint = $view.offerFingerprint
+                contentFingerprint = $view.contentFingerprint
                 source = $view.source
                 sourceId = $view.sourceId
                 sourceUrl = $view.sourceUrl
@@ -590,11 +649,24 @@ switch ($Action) {
                 qualityConfidence = $view.qualityConfidence
                 urgency = $view.urgency
                 sourceTimestamp = $view.sourceTimestamp
+                sourceToDetectionSeconds = $view.sourceToDetectionSeconds
                 firstSeenAt = $firstSeenAt
                 lastSeenAt = $view.observedAt
                 status = "sent"
                 notifiedAt = $now.ToString("o")
             }
+            $sourceToNotifySeconds = $null
+            $detectionToNotifySeconds = $null
+            $sourceTimestampValue = ConvertTo-Timestamp $view.sourceTimestamp
+            $observedAtValue = ConvertTo-Timestamp $view.observedAt
+            if ($null -ne $sourceTimestampValue -and $now -ge $sourceTimestampValue) {
+                $sourceToNotifySeconds = [Math]::Round(($now - $sourceTimestampValue).TotalSeconds, 0)
+            }
+            if ($null -ne $observedAtValue -and $now -ge $observedAtValue) {
+                $detectionToNotifySeconds = [Math]::Round(($now - $observedAtValue).TotalSeconds, 0)
+            }
+            $record.sourceToNotifySeconds = $sourceToNotifySeconds
+            $record.detectionToNotifySeconds = $detectionToNotifySeconds
             Set-ItemRecord $state $record
             $state.updatedAt = $now.ToString("o")
             Write-State $state $StatePath
@@ -604,6 +676,9 @@ switch ($Action) {
                 stateKey = $view.stateKey
                 offerFingerprint = $view.offerFingerprint
                 notifiedAt = $record.notifiedAt
+                sourceToDetectionSeconds = $view.sourceToDetectionSeconds
+                sourceToNotifySeconds = $sourceToNotifySeconds
+                detectionToNotifySeconds = $detectionToNotifySeconds
             }
         }
         $result | ConvertTo-Json -Depth 8

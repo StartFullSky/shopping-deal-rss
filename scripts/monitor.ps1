@@ -514,6 +514,24 @@ function New-DealItem {
     $modifiedDate = ConvertTo-DateTimeOffset $modifiedValue
     $publishedAt = if ($publishedDate) { $publishedDate.ToString("o") } else { $publishedValue }
     $modifiedAt = if ($modifiedDate) { $modifiedDate.ToString("o") } else { $modifiedValue }
+    $sourceTimestampDate = if ($null -eq $publishedDate) {
+        $modifiedDate
+    }
+    elseif ($null -eq $modifiedDate) {
+        $publishedDate
+    }
+    elseif ($modifiedDate -gt $publishedDate) {
+        $modifiedDate
+    }
+    else {
+        $publishedDate
+    }
+    $sourceToDetectionSeconds = if ($null -ne $sourceTimestampDate -and $ObservedAt -ge $sourceTimestampDate) {
+        [Math]::Round(($ObservedAt - $sourceTimestampDate).TotalSeconds, 0)
+    }
+    else {
+        $null
+    }
     $combinedText = "$($FeedItem.Title)`n$($FeedItem.Description)`n$($Detail.ContentText)"
     $originalPrice = Get-PriceAfterLabels $combinedText @("原价", "标价", "日常价", "吊牌价")
     $referencePrice = Get-PriceAfterLabels $combinedText @("参考价", "活动价", "优惠前", "划线价")
@@ -534,6 +552,7 @@ function New-DealItem {
         publishedAt = $publishedAt
         modifiedAt = $modifiedAt
         observedAt = $ObservedAt.ToString("o")
+        sourceToDetectionSeconds = $sourceToDetectionSeconds
         originalPrice = $originalPrice
         referencePrice = $referencePrice
         estimatedFinalPayable = $EstimatedFinalPayable
@@ -874,6 +893,19 @@ function New-BarkBody {
     return $body
 }
 
+function Get-NumericSummary {
+    param([object[]]$Values)
+    $numbers = @($Values | Where-Object { $null -ne $_ -and "$_" -match "^-?\d+(?:\.\d+)?$" } | ForEach-Object { [double]$_ })
+    if ($numbers.Count -eq 0) {
+        return [ordered]@{ count = 0; average = $null; max = $null }
+    }
+    return [ordered]@{
+        count = $numbers.Count
+        average = [Math]::Round(($numbers | Measure-Object -Average).Average, 0)
+        max = [Math]::Round(($numbers | Measure-Object -Maximum).Maximum, 0)
+    }
+}
+
 function Write-RunResult {
     param($Result, [string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) {
@@ -985,6 +1017,7 @@ try {
                 title = New-BarkTitle $candidate
                 body = New-BarkBody $candidate
                 level = Get-BarkLevel $candidate
+                sourceToDetectionSeconds = Get-PropertyValue $candidate @("sourceToDetectionSeconds") $null
             }
             $alertCount++
             continue
@@ -1001,6 +1034,9 @@ try {
                 stateKey = $stateKey
                 status = $markResult.status
                 title = [string]$candidate.title
+                sourceToDetectionSeconds = Get-PropertyValue $markResult @("sourceToDetectionSeconds") (Get-PropertyValue $candidate @("sourceToDetectionSeconds") $null)
+                sourceToNotifySeconds = Get-PropertyValue $markResult @("sourceToNotifySeconds") $null
+                detectionToNotifySeconds = Get-PropertyValue $markResult @("detectionToNotifySeconds") $null
             })
             $alertCount++
         }
@@ -1023,6 +1059,11 @@ try {
         sentCount = $sent.Count
         sourceErrors = @($sourceErrors)
         deliveryErrors = @($deliveryErrors)
+        latencySeconds = [ordered]@{
+            sourceToDetection = Get-NumericSummary @($sent | ForEach-Object { Get-PropertyValue $_ @("sourceToDetectionSeconds") $null })
+            sourceToNotify = Get-NumericSummary @($sent | ForEach-Object { Get-PropertyValue $_ @("sourceToNotifySeconds") $null })
+            detectionToNotify = Get-NumericSummary @($sent | ForEach-Object { Get-PropertyValue $_ @("detectionToNotifySeconds") $null })
+        }
         sent = @($sent)
         wouldSend = @($wouldSend)
     }

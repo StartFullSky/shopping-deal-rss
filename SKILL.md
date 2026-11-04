@@ -81,8 +81,10 @@ For any recurring monitor, use `scripts/deal-state.ps1` with the default state f
 - If `Status` reports that the state does not exist, write the current feed identities with `Initialize` and do not notify those initial items. This establishes a baseline and prevents a first-run alert burst.
 - Build one JSON candidate item per potential lead. Required fields are `source`, `sourceUrl`, `productUrl`, `dealType`, `publishedAt` or `modifiedAt`, `observedAt`, `estimatedFinalPayable`, and `reproductionSteps`. Deal type must describe an information asymmetry such as `price-error`, `coupon-stack`, `hidden-eligibility`, `channel-specific`, `checkout-mismatch`, or `variant-mismatch`.
 - Include the visible offer state that determines whether a later update is materially different: `originalPrice`, `referencePrice`, `couponState`, `quantityCondition`, `variant`, `channel`, and `validUntil` when the source provides them.
+- Use a normalized content fingerprint in addition to source identity. Suppress identical offer content reposted under another source ID for seven days, while allowing a materially changed price or purchase condition to notify again.
 - Run `Evaluate` before every notification. It enforces completeness, source freshness, the 24-hour absolute age limit, normalized identity, and offer-state fingerprints.
 - Call `MarkSent` only after Bark returns success. A failed send must remain eligible for the next run; `MarkSent` is idempotent for an unchanged offer.
+- Measure `sourceToDetectionSeconds`, `sourceToNotifySeconds`, and `detectionToNotifySeconds`. A scheduler success code is not evidence that the alert arrived quickly.
 
 ## Automated Monitoring
 
@@ -145,6 +147,7 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 
 - The repository records its GitHub comparison in `research/market-patterns.md`. Reuse the architectural lessons there, not third-party credentials, private APIs, anti-bot workarounds, or purchasing automation.
 - Favor bounded incremental scans, persistent identity/fingerprint state, cold-start suppression, immediate event delivery, and late rechecks over a single large batch.
+- Track delivery failures as pending work and prioritize them on the next run. Never mark a failed notification as sent merely to avoid duplicates.
 - Keep quality decisions explainable. Optional semantic or LLM filters may improve recall/precision later, but they must be disabled by default and must not replace source evidence.
 
 ## Safety And Scope

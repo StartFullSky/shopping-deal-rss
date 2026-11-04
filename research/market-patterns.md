@@ -14,6 +14,31 @@
 | [ningpeng/smzdm_mailnotify](https://github.com/ningpeng/smzdm_mailnotify) | 用历史 ID 文件过滤重复项；建议每分钟扫描 | ID 去重简单可靠；但轮询频率必须服从源站缓存和限流 |
 | [abinnz/xiaofendui](https://github.com/abinnz/xiaofendui) | 30 秒任务间隔；按消息源配置关键词、商城、白名单和黑名单；推送到多个群 | 可以按来源配置规则，但高频只能用于源站允许且缓存较短的接口 |
 | [cgbsmy/SmzdmRemind](https://github.com/cgbsmy/SmzdmRemind) | Windows 常驻进程；Toast、微信、钉钉、WxPusher、Bark 多通道；可按分数排序 | Windows 隐藏调度和多通道设计适合本仓库，但本项目先保持 Bark 单通道和无窗口运行 |
+| [zhdash/hxm5-monitor](https://github.com/zhdash/hxm5-monitor) | 帖子 ID 与内容指纹双层去重；失败进入 `pending` 且下轮优先补发；只有成功或重试耗尽才写 `seen`；指纹设 7 天 TTL 和容量上限 | 这是当前最完整的“不漏推、不重复推”实现，适合作为投递可靠性基线 |
+| [hbjbw00/xianbaoku-monitor](https://github.com/hbjbw00/xianbaoku-monitor) | 直接读取线报推送 JSON；Redis 按 ID 保存 7 天；按分类、标题、内容、作者和关键词过滤 | 速度快，但主要依赖关键词和 ID 去重，不能单独证明价格、库存或购买条件准确 |
+
+## 时效性与准确性深挖
+
+### 可量化时效
+
+- `CallMeByYourName/smzdm-monitor` 的历史样本覆盖 700 次运行，其中 696 次成功、4 次因 GitHub runner 未分配而失败；连续样本的平均运行时间约 233 秒、扫描时间约 217 秒。它用运行日志持续观察失败率、扫描耗时、候选量和推送量。
+- `zhdash/hxm5-monitor` 记录到 GitHub 定时任务实际间隔可能远差于标称频率，因此改为单次触发后在任务内长循环。本项目使用 Windows Task Scheduler，仍应记录“来源发布时间 → 本地发现 → Bark 成功”三段延迟，而不能只看计划任务的 `LastTaskResult=0`。
+- 线报 RSS 的 `max-age=300` 决定发现延迟下限。单纯增加轮询频率不会突破源站缓存；要继续提速，只能使用源站允许的事件/推送接口或更快的独立来源。
+
+### 可验证准确
+
+- 历史复盘发现，即使规则复杂的 SMZDM 监控，也曾有约 13% 的推送不是可购买商品，例如直播间、抽奖、任务、返利页和券合集。这说明“能解析到价格”不等于“可执行好价”。
+- 最有效的准确度组合是：明确总价/单位价、购买门槛、数量、规格、渠道、有效期、可复现步骤和商品入口同时存在；缺少购买条件时降级或拒绝。
+- 社区互动、热榜、评论数只能表示关注度。价格优势需要历史同口径价格或可见结算证据；不同数量、会员、返利和规格不能直接比较。
+- 同一内容换帖子 ID、不同作者重复转发会造成重复推送。需要 ID 去重之外的内容指纹，但指纹过短或包含动态时间时应禁用，避免误合并。
+- 推送失败不能提前写成已处理。应保存 pending 队列并优先补发；只有成功或明确耗尽重试后才从队列移除。
+
+### 本项目新增指标
+
+- 记录 `sourceToDetectionSeconds`：来源发布时间到本地发现的延迟。
+- 记录 `sourceToNotifySeconds` 和 `detectionToNotifySeconds`：来源/发现到 Bark 成功的延迟。
+- 增加跨帖子 `contentFingerprint`，相同规范化内容在 7 天内只推送一次。
+- 投递成功状态继续幂等；未成功的候选仍可由后续轮次重新评估。
 
 ## 市场主流做法
 
