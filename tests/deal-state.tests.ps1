@@ -30,6 +30,11 @@ function New-TestItem {
         observedAt = $now.AddMinutes(-1).ToString("o")
         estimatedFinalPayable = $Price
         priceBasis = "total"
+        historicalPrice = 30
+        historicalDiscountPct = 30
+        historicalSourceUrl = "https://example.com/history"
+        aiDecision = "verified-good-deal"
+        aiConfidence = 0.9
         qualityScore = 92
         qualityConfidence = "high"
         urgency = "timeSensitive"
@@ -60,6 +65,9 @@ try {
     $marked = Invoke-StateAction @("-Action", "MarkSent", "-StatePath", $statePath, "-ItemJsonFile", $itemJsonPath)
     Assert-True ($marked.status -eq "sent") "MarkSent should persist successful delivery."
     Assert-True ($null -ne $marked.sourceToNotifySeconds) "MarkSent should report source-to-notify latency."
+    $savedState = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+    Assert-True ([string]$savedState.items[0].historicalPrice -eq "30") "Historical price should be persisted."
+    Assert-True ([string]$savedState.items[0].aiDecision -eq "verified-good-deal") "AI decision should be persisted."
 
     $duplicate = New-TestItem "source-2" "https://example.com/post/2" 21
     Write-TestItems @($duplicate) $itemsPath
@@ -74,7 +82,7 @@ try {
 
     [pscustomobject]@{
         status = "passed"
-        assertions = 5
+    assertions = 7
     } | ConvertTo-Json -Compress
 }
 finally {

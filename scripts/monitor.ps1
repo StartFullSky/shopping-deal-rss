@@ -373,6 +373,24 @@ function Get-PriceAfterLabels {
     return [decimal]$match.Groups["price"].Value
 }
 
+function Get-HistoricalPrice {
+    param([string]$Text)
+    return Get-PriceAfterLabels $Text @(
+        "历史价",
+        "历史到手价",
+        "历史到手",
+        "近期到手价",
+        "近期价",
+        "30天低价",
+        "近30天低价",
+        "三十天低价",
+        "常购价",
+        "日常到手价",
+        "上次到手价",
+        "同款日常价"
+    )
+}
+
 function Get-FinalPayable {
     param([string]$Text, [string]$Title)
     return (Get-DealPriceInfo $Text $Title).estimatedFinalPayable
@@ -500,6 +518,7 @@ function New-DealItem {
         $PriceInfo,
         $Quality,
         [string]$Evidence,
+        $HistoricalPrice,
         [DateTimeOffset]$ObservedAt
     )
     $sourceUrl = [string]$FeedItem.Link
@@ -556,6 +575,12 @@ function New-DealItem {
         originalPrice = $originalPrice
         referencePrice = $referencePrice
         estimatedFinalPayable = $EstimatedFinalPayable
+        historicalPrice = $HistoricalPrice
+        historicalDiscountPct = $Quality.historicalDiscountPct
+        historicalSourceUrl = $null
+        aiDecision = $null
+        aiConfidence = $null
+        aiReason = $null
         priceBasis = [string]$PriceInfo.priceBasis
         unitPrice = $PriceInfo.unitPrice
         priceUnit = [string]$PriceInfo.unit
@@ -582,6 +607,7 @@ function Get-SourceCandidates {
     $monitor = Get-PropertyValue $Config @("monitor") $null
     $network = Get-PropertyValue $Config @("network") $null
     $qualityConfig = Get-PropertyValue $Config @("quality") $null
+    $aiConfig = Get-PropertyValue $Config @("ai") $null
     $url = [string](Get-PropertyValue $Source @("url") "")
     if ([string]::IsNullOrWhiteSpace($url)) {
         throw "Source URL is required."
@@ -597,7 +623,10 @@ function Get-SourceCandidates {
     $excludePatterns = Get-ArrayValue $rules "excludePatterns"
     $kind = [string](Get-PropertyValue $Source @("kind") "rss")
     $qualityMinScore = [double](Get-PropertyValue $qualityConfig @("minScore") 72)
+    $aiEnabled = [bool](Get-PropertyValue $aiConfig @("enabled") $false)
+    $maxAiReviews = [int](Get-PropertyValue $aiConfig @("maxReviewsPerRun") 2)
     $detailFetches = 0
+    $aiReviews = 0
     Write-Verbose "Source $(Get-PropertyValue $Source @('id') '') returned $(@($feedItems).Count) feed items."
     $preparedItems = foreach ($feedItem in $feedItems) {
         $sourceTimestamp = ConvertTo-DateTimeOffset ([string](Get-PropertyValue $FeedItem @("ModifiedAt") ""))
@@ -611,6 +640,10 @@ function Get-SourceCandidates {
         $preliminaryText = "$($FeedItem.Title)`n$($FeedItem.Description)"
         if (-not (Test-KeywordFilters $preliminaryText $includeKeywords $excludeKeywords)) {
             Write-Verbose "Skipping keyword-filtered feed item: $($FeedItem.Title)"
+            continue
+        }
+        if ((Test-AnyPattern $preliminaryText $excludePatterns) -and -not (Test-AnyPattern $preliminaryText $alwaysKeepPatterns)) {
+            Write-Verbose "Skipping excluded feed item: $($FeedItem.Title)"
             continue
         }
         $preliminaryDealType = Get-DealType $preliminaryText $rules
@@ -690,6 +723,7 @@ function Get-SourceCandidates {
             continue
         }
         $priceInfo = Get-DealPriceInfo $combinedText ([string]$FeedItem.Title)
+        $historicalPrice = Get-HistoricalPrice $combinedText
         if ($targetPriceMet) {
             $currentPrice = Get-CurrentPrice $combinedText
             $priceInfo = [pscustomobject]@{
@@ -718,7 +752,10 @@ function Get-SourceCandidates {
             -ReproductionSteps @($detail.ReproductionSteps) `
             -ProductUrl (Get-BestProductLink @($detail.Links) ([string]$FeedItem.Link)) `
             -SourceAgeMinutes $sourceAgeMinutes `
-            -MinScore $qualityMinScore
+            -MinScore $qualityMinScore `
+            -HistoricalPrice $historicalPrice `
+            -MinHistoricalDiscountPct ([double](Get-PropertyValue $qualityConfig @("minHistoricalDiscountPct") 30)) `
+            -RequireHistoricalPrice ((-not $aiEnabled) -and [bool](Get-PropertyValue $qualityConfig @("requireHistoricalPrice") $true))
         if (-not $quality.qualified) {
             Write-Verbose "Skipping low-confidence $($dealType) item: $($FeedItem.Title) score=$($quality.score)"
             continue
@@ -731,7 +768,55 @@ function Get-SourceCandidates {
             $evidence = "Source feed explicitly reported this deal type."
         }
         Write-Verbose "Qualified $dealType item: $($FeedItem.Title)"
-        $item = New-DealItem $Source $FeedItem $detail ([string]$dealType) ([decimal]$estimatedFinalPayable) $priceInfo $quality $evidence $Now
+        $item = New-DealItem $Source $FeedItem $detail ([string]$dealType) ([decimal]$estimatedFinalPayable) $priceInfo $quality $evidence $historicalPrice $Now
+        if ($aiEnabled) {
+            if ($aiReviews -ge $maxAiReviews) {
+                Write-Verbose "Skipping item because the AI review budget is exhausted: $($FeedItem.Title)"
+                continue
+            }
+            $aiReviews++
+            $itemJsonPath = Join-Path $env:TEMP ("shopping-deal-ai-item-" + [guid]::NewGuid().ToString("N") + ".json")
+            try {
+                $item | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $itemJsonPath -Encoding UTF8
+                $aiReview = & (Join-Path $PSScriptRoot "ai-price-review.ps1") `
+                    -ItemJsonFile $itemJsonPath `
+                    -MinHistoricalDiscountPct ([double](Get-PropertyValue $aiConfig @("minHistoricalDiscountPct") (Get-PropertyValue $qualityConfig @("minHistoricalDiscountPct") 30))) `
+                    -Model ([string](Get-PropertyValue $aiConfig @("model") "")) `
+                    -CodexCommandPath ([string](Get-PropertyValue $aiConfig @("codexCommandPath") "")) `
+                    -TimeoutSec ([int](Get-PropertyValue $aiConfig @("timeoutSec") 180))
+            }
+            catch {
+                Write-Verbose "Skipping item after AI review failure: $($FeedItem.Title) $($_.Exception.Message)"
+                continue
+            }
+            finally {
+                if (Test-Path -LiteralPath $itemJsonPath) {
+                    Remove-Item -LiteralPath $itemJsonPath -Force
+                }
+            }
+            $aiConfidence = [double](Get-PropertyValue $aiReview @("confidence") 0)
+            $aiDiscount = Get-PropertyValue $aiReview @("discountPct") $null
+            $aiHistoricalPrice = Get-PropertyValue $aiReview @("historicalPrice") $null
+            $aiHistoricalSourceUrl = [string](Get-PropertyValue $aiReview @("historicalSourceUrl") "")
+            $aiMinConfidence = [double](Get-PropertyValue $aiConfig @("minConfidence") 0.8)
+            $aiMinDiscount = [double](Get-PropertyValue $aiConfig @("minHistoricalDiscountPct") (Get-PropertyValue $qualityConfig @("minHistoricalDiscountPct") 30))
+            $validAiSource = $aiHistoricalSourceUrl -match "^https?://"
+            if (-not [bool](Get-PropertyValue $aiReview @("approved") $false) -or
+                $aiConfidence -lt $aiMinConfidence -or
+                $null -eq $aiHistoricalPrice -or
+                $null -eq $aiDiscount -or
+                [double]$aiDiscount -lt $aiMinDiscount -or
+                -not $validAiSource) {
+                Write-Verbose "Skipping item rejected by AI price review: $($FeedItem.Title)"
+                continue
+            }
+            $item.historicalPrice = [decimal]$aiHistoricalPrice
+            $item.historicalDiscountPct = [decimal]$aiDiscount
+            $item.historicalSourceUrl = $aiHistoricalSourceUrl
+            $item.aiDecision = [string](Get-PropertyValue $aiReview @("decision") "")
+            $item.aiConfidence = $aiConfidence
+            $item.aiReason = [string](Get-PropertyValue $aiReview @("reason") "")
+        }
         if ($dealType -eq "target-price-met" -and $null -ne $targetPrice) {
             $item.referencePrice = [decimal]$targetPrice
         }
@@ -880,6 +965,9 @@ function New-BarkBody {
     $body = $lines -join "`n"
     if ($Item.productUrl -and $body.IndexOf([string]$Item.productUrl, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
         $lines.Add("商品 $($Item.productUrl)")
+    }
+    if ($null -ne $Item.historicalPrice -and $null -ne $Item.historicalDiscountPct) {
+        $lines.Add("历史价 ¥$(([decimal]$Item.historicalPrice).ToString('0.##'))｜低于历史 $(([decimal]$Item.historicalDiscountPct).ToString('0.#'))%")
     }
     if ($Item.sourceUrl -and $body.IndexOf([string]$Item.sourceUrl, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
         $sourceTime = if ($Item.modifiedAt) { $Item.modifiedAt } else { $Item.publishedAt }

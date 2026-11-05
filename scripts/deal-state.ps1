@@ -175,6 +175,7 @@ function ConvertTo-DealView {
         (Get-CanonicalText (Get-TextValue $Item @("priceUnit", "price_unit"))),
         (Get-CanonicalText (Get-TextValue $Item @("originalPrice", "original_price", "listPrice"))),
         (Get-CanonicalText (Get-TextValue $Item @("referencePrice", "reference_price"))),
+        (Get-CanonicalText (Get-TextValue $Item @("historicalPrice", "historical_price"))),
         (Get-CanonicalText (Get-TextValue $Item @("couponState", "coupon_state"))),
         (Get-CanonicalText (Get-TextValue $Item @("quantityCondition", "quantity_condition"))),
         (Get-CanonicalText (Get-TextValue $Item @("variant", "sku"))),
@@ -187,6 +188,7 @@ function ConvertTo-DealView {
         (Get-CanonicalText (Get-TextValue $Item @("title"))),
         (Get-CanonicalText (Get-TextValue $Item @("estimatedFinalPayable", "estimated_final_payable", "finalPayable"))),
         (Get-CanonicalText (Get-TextValue $Item @("priceBasis", "price_basis"))),
+        (Get-CanonicalText (Get-TextValue $Item @("historicalPrice", "historical_price"))),
         (Get-CanonicalText (Get-TextValue $Item @("couponState", "coupon_state"))),
         (Get-CanonicalText (Get-TextValue $Item @("quantityCondition", "quantity_condition"))),
         (Get-CanonicalText (Get-TextValue $Item @("variant", "sku"))),
@@ -265,6 +267,12 @@ function ConvertTo-DealView {
         sourceToDetectionSeconds = $sourceToDetectionSeconds
         originalPrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("originalPrice", "original_price", "listPrice"))
         referencePrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("referencePrice", "reference_price"))
+        historicalPrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("historicalPrice", "historical_price"))
+        historicalDiscountPct = ConvertTo-InvariantNumber (Get-TextValue $Item @("historicalDiscountPct", "historical_discount_pct"))
+        historicalSourceUrl = Get-TextValue $Item @("historicalSourceUrl", "historical_source_url")
+        aiDecision = Get-TextValue $Item @("aiDecision", "ai_decision")
+        aiConfidence = ConvertTo-InvariantNumber (Get-TextValue $Item @("aiConfidence", "ai_confidence"))
+        aiReason = Get-TextValue $Item @("aiReason", "ai_reason")
         estimatedFinalPayable = $estimatedFinalPayable
         priceBasis = Get-TextValue $Item @("priceBasis", "price_basis")
         unitPrice = ConvertTo-InvariantNumber (Get-TextValue $Item @("unitPrice", "unit_price"))
@@ -482,6 +490,11 @@ switch ($Action) {
                     productUrl = $view.productUrl
                     dealType = $view.dealType
                     estimatedFinalPayable = $view.estimatedFinalPayable
+                    historicalPrice = $view.historicalPrice
+                    historicalDiscountPct = $view.historicalDiscountPct
+                    historicalSourceUrl = $view.historicalSourceUrl
+                    aiDecision = $view.aiDecision
+                    aiConfidence = $view.aiConfidence
                     priceBasis = $view.priceBasis
                     qualityScore = $view.qualityScore
                     qualityConfidence = $view.qualityConfidence
@@ -644,6 +657,11 @@ switch ($Action) {
                 productUrl = $view.productUrl
                 dealType = $view.dealType
                 estimatedFinalPayable = $view.estimatedFinalPayable
+                historicalPrice = $view.historicalPrice
+                historicalDiscountPct = $view.historicalDiscountPct
+                historicalSourceUrl = $view.historicalSourceUrl
+                aiDecision = $view.aiDecision
+                aiConfidence = $view.aiConfidence
                 priceBasis = $view.priceBasis
                 qualityScore = $view.qualityScore
                 qualityConfidence = $view.qualityConfidence

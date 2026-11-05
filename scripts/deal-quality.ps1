@@ -73,7 +73,10 @@ function Get-DealQualityAssessment {
         [object[]]$ReproductionSteps = @(),
         [string]$ProductUrl = "",
         [double]$SourceAgeMinutes = 0,
-        [double]$MinScore = 72
+        [double]$MinScore = 72,
+        $HistoricalPrice = $null,
+        [double]$MinHistoricalDiscountPct = 30,
+        [bool]$RequireHistoricalPrice = $true
     )
 
     $combinedText = "$Title`n$Text"
@@ -91,6 +94,14 @@ function Get-DealQualityAssessment {
     $sequenceEvidence = $combinedText -match "[①②③④⑤⑥⑦⑧⑨⑩]|步骤|第一步|再次|然后|接着"
     $ordinaryPromotion = $combinedText -match "今日.{0,6}(?:特价|好价)|限时.{0,6}(?:特价|秒杀)|聚划算|团购|拼团"
     $complicatedReward = $combinedText -match "返[¥￥]?\d+|返(?:E卡|积分|豆|金)|晒单|评论.{0,8}(?:奖励|返)|抽奖"
+    $currentPayable = if ($null -ne $PriceInfo) { $PriceInfo.estimatedFinalPayable } else { $null }
+    $historicalPriceValue = if ($null -ne $HistoricalPrice) { [double]$HistoricalPrice } else { $null }
+    $historicalDiscountPct = $null
+    $priceAdvantage = $false
+    if ($null -ne $currentPayable -and $null -ne $historicalPriceValue -and $historicalPriceValue -gt 0 -and $currentPayable -ge 0) {
+        $historicalDiscountPct = [Math]::Round((($historicalPriceValue - [double]$currentPayable) / $historicalPriceValue) * 100, 1)
+        $priceAdvantage = $historicalDiscountPct -ge $MinHistoricalDiscountPct
+    }
 
     $baseScores = @{
         "price-error" = 82
@@ -177,6 +188,20 @@ function Get-DealQualityAssessment {
         $score -= 4
         $riskFlags.Add("eligibility-or-quantity")
     }
+    if ($RequireHistoricalPrice) {
+        if ($null -eq $historicalPriceValue) {
+            $score -= 20
+            $riskFlags.Add("missing-historical-price")
+        }
+        elseif (-not $priceAdvantage) {
+            $score -= 25
+            $riskFlags.Add("discount-below-threshold")
+        }
+        else {
+            $score += 10
+            $reasons.Add("historical-price-advantage")
+        }
+    }
 
     $hardGate = $true
     switch ($DealType) {
@@ -200,7 +225,8 @@ function Get-DealQualityAssessment {
     }
 
     $score = [Math]::Max(0, [Math]::Min(100, $score))
-    $qualified = $hardGate -and $score -ge $MinScore
+    $priceGate = -not $RequireHistoricalPrice -or $priceAdvantage
+    $qualified = $hardGate -and $priceGate -and $score -ge $MinScore
     $confidence = if ($score -ge 88) { "high" } elseif ($score -ge 72) { "medium" } else { "low" }
     $urgentTypes = @("price-error", "zero-price", "flash-inventory", "checkout-mismatch")
     $urgency = if ($qualified -and (($urgentTypes -contains $DealType -and $SourceAgeMinutes -le 30) -or $score -ge 88)) {
@@ -219,6 +245,9 @@ function Get-DealQualityAssessment {
         confidence = $confidence
         urgency = $urgency
         actionStepCount = $actionStepCount
+        historicalPrice = $historicalPriceValue
+        historicalDiscountPct = $historicalDiscountPct
+        priceAdvantage = $priceAdvantage
         reasons = @($reasons)
         riskFlags = @($riskFlags)
     }

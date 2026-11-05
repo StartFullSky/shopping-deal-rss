@@ -28,6 +28,8 @@ the lowest available price.
 - Send bounded Bark notifications with `active` or `timeSensitive` priority,
   a clickable source URL, and no images or device-key logging.
 - Run once manually or every 5 minutes through a Windows Scheduled Task.
+- Exclude user-declared categories before detail fetching. The default config
+  excludes books and book media without excluding backpacks, shelves, or desks.
 - Record GitHub market research and reusable monitoring patterns in
   `research/market-patterns.md`.
 
@@ -114,6 +116,8 @@ automation, then configure a private Bark endpoint and validate with `-DryRun`.
 
 `scripts/deal-quality.ps1` keeps fast discovery from becoming noisy delivery:
 
+- Non-AI mode requires explicit historical-price evidence and at least a 30%
+  discount. List prices and crossed-out prices are not accepted as history.
 - Coupon stacks require coupon evidence plus stacking/cart/checkout sequencing
   and at least two reproducible actions.
 - Variant mismatches require fulfillment evidence and a specific wrong-item,
@@ -124,6 +128,19 @@ automation, then configure a private Bark endpoint and validate with `-DryRun`.
   labeled by their unit instead of being shown as a total checkout price.
 - Fresh high-confidence anomalies use Bark `timeSensitive`; other qualified
   leads use `active`.
+- Optional AI review can research the exact product and recent public prices
+  through Codex CLI. It remains disabled until Codex CLI authentication works.
+  AI approval requires a comparable historical price, a public evidence URL,
+  confidence of at least 0.8, and the configured discount threshold. Failures
+  reject the candidate instead of falling back to a noisy rule-only send.
+
+Test the AI adapter without invoking a model:
+
+```powershell
+pwsh -File scripts/ai-price-review.ps1 `
+  -ItemJsonFile .\item.json `
+  -DryRun
+```
 
 See `research/market-patterns.md` for the GitHub projects compared and the
 speed/push/accuracy patterns adopted or intentionally rejected.
@@ -312,6 +329,8 @@ policy.
 ```text
 .
 ├── agents/openai.yaml
+├── assets/ai-price-review.schema.json
+├── scripts/ai-price-review.ps1
 ├── scripts/deal-state.ps1
 ├── scripts/deal-quality.ps1
 ├── scripts/install-monitor-task.ps1
@@ -320,6 +339,7 @@ policy.
 ├── scripts/send_bark.ps1
 ├── tests/deal-quality.tests.ps1
 ├── tests/deal-state.tests.ps1
+├── tests/monitor-config.tests.ps1
 ├── research/market-patterns.md
 ├── monitor-config.json
 ├── SKILL.md

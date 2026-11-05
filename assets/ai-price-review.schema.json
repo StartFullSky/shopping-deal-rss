@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "properties": {
+    "approved": {
+      "type": "boolean"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "verified-good-deal",
+        "ordinary-price",
+        "insufficient-history",
+        "product-mismatch",
+        "stale-or-expired",
+        "research-failed"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "currentPrice": {
+      "type": ["number", "null"]
+    },
+    "historicalPrice": {
+      "type": ["number", "null"]
+    },
+    "discountPct": {
+      "type": ["number", "null"]
+    },
+    "historicalSourceUrl": {
+      "type": ["string", "null"]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "approved",
+    "decision",
+    "confidence",
+    "currentPrice",
+    "historicalPrice",
+    "discountPct",
+    "historicalSourceUrl",
+    "evidence",
+    "reason"
+  ],
+  "additionalProperties": false
+}

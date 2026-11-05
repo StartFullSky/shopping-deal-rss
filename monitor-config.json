@@ -9,10 +9,21 @@
     "intervalMinutes": 5,
     "maxLookbackMinutes": 180,
     "maxDetailFetchesPerRun": 16,
-    "maxAlertsPerRun": 4
+    "maxAlertsPerRun": 2
   },
   "quality": {
-    "minScore": 72
+    "minScore": 88,
+    "minHistoricalDiscountPct": 30,
+    "requireHistoricalPrice": true
+  },
+  "ai": {
+    "enabled": false,
+    "model": "",
+    "codexCommandPath": "",
+    "minConfidence": 0.8,
+    "minHistoricalDiscountPct": 30,
+    "maxReviewsPerRun": 2,
+    "timeoutSec": 180
   },
   "delivery": {
     "barkSecretPath": "%USERPROFILE%\\.codex\\secrets\\shopping-deal-rss-bark.bin",
@@ -28,6 +39,7 @@
       "实付.{0,12}低于|结算.{0,12}低于"
     ],
     "excludePatterns": [
+      "(?i)(?:图书|书籍|书本|电子书|有声书|(?<!儿)童书|绘本|漫画|小说|教辅|教材|课外书|读物|词典|字帖|练习册|作文书|读书|kindle|图书券|图书卡|当当.{0,6}书)",
       "今日.{0,6}(?:特价|好价)",
       "限时.{0,6}(?:特价|秒杀)",
       "聚划算|团购|拼团"

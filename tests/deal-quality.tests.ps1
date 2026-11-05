@@ -46,10 +46,36 @@ $sampleQuality = Get-DealQualityAssessment `
     -PriceInfo $samplePrice `
     -ReproductionSteps $sampleSteps `
     -ProductUrl "https://item.example/product/123" `
-    -SourceAgeMinutes 3
+    -SourceAgeMinutes 3 `
+    -HistoricalPrice 30
 Assert-True $sampleQuality.qualified "A reproducible coupon stack should qualify."
 Assert-True ($sampleQuality.score -ge 88) "A strong coupon stack should have a high score."
 Assert-Equal "timeSensitive" $sampleQuality.urgency "A fresh high-score stack should use time-sensitive delivery."
+Assert-Equal 30 $sampleQuality.historicalDiscountPct "A 30 percent historical discount should be reported."
+Assert-True $sampleQuality.priceAdvantage "A 30 percent historical discount should satisfy the default threshold."
+
+$missingHistory = Get-DealQualityAssessment `
+    -Text $sampleText `
+    -Title $sampleTitle `
+    -DealType "coupon-stack" `
+    -PriceInfo $samplePrice `
+    -ReproductionSteps $sampleSteps `
+    -ProductUrl "https://item.example/product/123" `
+    -SourceAgeMinutes 3
+Assert-True (-not $missingHistory.qualified) "A deal without historical price evidence should not qualify."
+Assert-True ($missingHistory.riskFlags -contains "missing-historical-price") "Missing history should be reported as a risk."
+
+$smallDiscount = Get-DealQualityAssessment `
+    -Text $sampleText `
+    -Title $sampleTitle `
+    -DealType "coupon-stack" `
+    -PriceInfo $samplePrice `
+    -ReproductionSteps $sampleSteps `
+    -ProductUrl "https://item.example/product/123" `
+    -SourceAgeMinutes 3 `
+    -HistoricalPrice 25
+Assert-True (-not $smallDiscount.qualified) "A discount below the configured threshold should not qualify."
+Assert-True ($smallDiscount.riskFlags -contains "discount-below-threshold") "A small discount should be reported as a risk."
 
 $ordinaryCoupon = Get-DealQualityAssessment `
     -Text "领券并叠加优惠，39元" `
@@ -80,5 +106,5 @@ Assert-True (-not $promotionQuantity.qualified) "A normal quantity promotion is 
 
 [pscustomobject]@{
     status = "passed"
-    assertions = 11
+    assertions = 16
 } | ConvertTo-Json -Compress

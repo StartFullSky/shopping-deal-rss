@@ -40,6 +40,9 @@ Turn explicit shopping targets into RSSHub subscriptions, explain what each sour
 - Exclude ordinary flash sales, public group buys, scheduled marketplace campaigns, obvious homepage promotions, and `today only` banners unless they combine with a non-obvious stacking or pricing anomaly.
 - Do not call a result `information advantage` merely because it is cheap. Require at least one of: price anomaly evidence, reproducible coupon stacking, hidden eligibility, variant mismatch, or a checkout price that cannot be explained by the visible promotion.
 - When normal-price evidence is unavailable, label the result `unverified lead`, include the source's claim, and do not describe it as a confirmed error price.
+- Apply user category exclusions before requesting detail pages. If the user excludes books, reject explicit book/media categories such as `图书`, `电子书`, `童书`, `绘本`, `教辅`, and `教材`, but do not overmatch non-book products such as `书包`, `书架`, or `书桌`.
+- Treat `原价`, `标价`, `吊牌价`, and `划线价` as list-price claims, not historical prices. A historical comparison requires the same product, pack size, variant, quantity, and channel plus a recent price observation or independently researched evidence.
+- When AI review is unavailable, require explicit historical-price evidence and the configured discount threshold before notifying. Silence is preferable to an unverified ordinary promotion.
 - Enforce freshness before notification. Error prices, zero-price loops, and flash inventory are eligible only when the source was posted or updated within 30 minutes. Coupon-stack and channel-specific leads use a 6-hour window. Never push a shopping lead older than 24 hours.
 - If the source has no reliable timestamp, or the link cannot be revalidated at send time, do not push it. It may be mentioned in a research response only when the user asked for historical examples.
 - Use `scripts/deal-quality.ps1` as the quality gate for the executable monitor. Require independent evidence for each deal type, distinguish total payable from unit price, and reject ordinary promotions even when a broad keyword appears.
@@ -149,6 +152,7 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - Favor bounded incremental scans, persistent identity/fingerprint state, cold-start suppression, immediate event delivery, and late rechecks over a single large batch.
 - Track delivery failures as pending work and prioritize them on the next run. Never mark a failed notification as sent merely to avoid duplicates.
 - Keep quality decisions explainable. Optional semantic or LLM filters may improve recall/precision later, but they must be disabled by default and must not replace source evidence.
+- Optional Codex CLI price review must research public evidence for the exact product and comparable historical price, require a public source URL and configured confidence/discount threshold, and fail closed on timeout, authentication failure, product mismatch, or insufficient history. Do not log in, open carts, claim coupons, or place orders during review.
 
 ## Safety And Scope
 
