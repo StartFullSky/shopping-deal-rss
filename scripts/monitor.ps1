@@ -756,7 +756,7 @@ function Get-SourceCandidates {
             -HistoricalPrice $historicalPrice `
             -MinHistoricalDiscountPct ([double](Get-PropertyValue $qualityConfig @("minHistoricalDiscountPct") 30)) `
             -RequireHistoricalPrice ((-not $aiEnabled) -and [bool](Get-PropertyValue $qualityConfig @("requireHistoricalPrice") $true))
-        if (-not $quality.qualified) {
+        if (-not $quality.qualified -and -not $aiEnabled) {
             Write-Verbose "Skipping low-confidence $($dealType) item: $($FeedItem.Title) score=$($quality.score)"
             continue
         }
