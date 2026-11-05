@@ -77,7 +77,8 @@ The current payable price is the candidate's estimatedFinalPayable.
 A historical price must be a real recent price observation from the last 180 days. A list price, crossed-out price, coupon face value, or unsupported model memory is not historical evidence.
 Approve only when the current payable price is at least $MinHistoricalDiscountPct percent below a verified comparable historical price and the deal still appears actionable.
 If the evidence is missing, stale, mismatched, or ambiguous, set approved to false.
-Return only one JSON object matching the supplied schema.
+Return only one JSON object that validates against this JSON Schema:
+$([IO.File]::ReadAllText($SchemaPath))
 
 CANDIDATE_JSON
 $itemJson
@@ -98,11 +99,9 @@ $argumentValues = @(
     "exec",
     "--skip-git-repo-check",
     "--ephemeral",
-    "--ignore-user-config",
     "--ignore-rules",
     "--sandbox", "read-only",
     "--color", "never",
-    "--output-schema", $SchemaPath,
     "--output-last-message", $outputPath
 )
 if (-not [string]::IsNullOrWhiteSpace($Model)) {
@@ -114,6 +113,7 @@ $startInfo = [Diagnostics.ProcessStartInfo]::new()
 $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $startInfo.RedirectStandardInput = $true
+$startInfo.StandardInputEncoding = [Text.UTF8Encoding]::new($false)
 $startInfo.RedirectStandardOutput = $true
 $startInfo.RedirectStandardError = $true
 if (@(".cmd", ".bat") -contains $extension) {
@@ -144,7 +144,8 @@ try {
     [IO.File]::WriteAllText($stdoutPath, $stdout, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText($stderrPath, $stderr, [Text.UTF8Encoding]::new($false))
     if ($process.ExitCode -ne 0) {
-        throw "AI price review failed with exit code $($process.ExitCode)."
+        $stderrExcerpt = if ($stderr.Length -gt 4000) { $stderr.Substring($stderr.Length - 4000) } else { $stderr }
+        throw "AI price review failed with exit code $($process.ExitCode).`n$stderrExcerpt"
     }
     if (-not (Test-Path -LiteralPath $outputPath)) {
         throw "AI price review did not produce a final JSON result."

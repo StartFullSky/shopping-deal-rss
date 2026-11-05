@@ -786,7 +786,16 @@ function Get-SourceCandidates {
                     -TimeoutSec ([int](Get-PropertyValue $aiConfig @("timeoutSec") 180))
             }
             catch {
-                Write-Verbose "Skipping item after AI review failure: $($FeedItem.Title) $($_.Exception.Message)"
+                if ($quality.score -lt $qualityMinScore) {
+                    Write-Verbose "Skipping item after AI review failure: $($FeedItem.Title) $($_.Exception.Message)"
+                    continue
+                }
+                $item.aiDecision = "review-unavailable"
+                $item.aiConfidence = 0
+                $item.aiReason = $_.Exception.Message
+                $item.urgency = "active"
+                Write-Verbose "Falling back to rule-based candidate after AI review failure: $($FeedItem.Title)"
+                $item
                 continue
             }
             finally {
@@ -968,6 +977,9 @@ function New-BarkBody {
     }
     if ($null -ne $Item.historicalPrice -and $null -ne $Item.historicalDiscountPct) {
         $lines.Add("历史价 ¥$(([decimal]$Item.historicalPrice).ToString('0.##'))｜低于历史 $(([decimal]$Item.historicalDiscountPct).ToString('0.#'))%")
+    }
+    if ([string]$Item.aiDecision -eq "review-unavailable") {
+        $lines.Add("AI复核不可用｜按规则候选")
     }
     if ($Item.sourceUrl -and $body.IndexOf([string]$Item.sourceUrl, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
         $sourceTime = if ($Item.modifiedAt) { $Item.modifiedAt } else { $Item.publishedAt }

@@ -23,7 +23,7 @@
     "minConfidence": 0.8,
     "minHistoricalDiscountPct": 30,
     "maxReviewsPerRun": 2,
-    "timeoutSec": 180
+    "timeoutSec": 30
   },
   "delivery": {
     "barkSecretPath": "%USERPROFILE%\\.codex\\secrets\\shopping-deal-rss-bark.bin",
