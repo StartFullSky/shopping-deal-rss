@@ -52,8 +52,8 @@
       "user_list_endpoint": "https://wxpusher.zjiecode.com/api/fun/wxuser/v2",
       "app_token_env": "WXPUSHER_APP_TOKEN",
       "app_token_secret_path": "%USERPROFILE%/.codex/secrets/shopping-deal-rss-wxpusher.bin",
-      "recipient_mode": "all_followers",
-      "topic_ids": []
+      "recipient_mode": "topic",
+      "topic_ids": [48513]
     },
     "state_path": ".state/notifications.sqlite3",
     "cold_start": "baseline",
