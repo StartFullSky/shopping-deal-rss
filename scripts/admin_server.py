@@ -104,7 +104,7 @@ class AdminApp:
                 "observed_at": observed_at, "rows": rows}
 
 
-def create_server(app, port=8765):
+def create_server(app, port=8766):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
             pass
@@ -194,7 +194,7 @@ def create_server(app, port=8765):
 
 def main():
     parser = argparse.ArgumentParser(description="Local deal dashboard (preview only)")
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--open-browser", action="store_true")
     parser.add_argument("--config", type=pathlib.Path, default=ROOT / "product-filter-config.json")
     parser.add_argument("--monitor-config", type=pathlib.Path, default=ROOT / "monitor-config.json")

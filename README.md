@@ -30,12 +30,12 @@ Windows 下双击 [start-admin.cmd](start-admin.cmd)，即可启动服务并打�
 python -X utf8 scripts/admin_server.py --open-browser
 ```
 
-访问 [本地后台](http://127.0.0.1:8765)。服务仅监听本机回环地址，不部署网站或创建公网隧道；按 `Ctrl+C` 停止服务。
+访问 [本地后台](http://127.0.0.1:8766)。服务仅监听本机回环地址，不部署网站或创建公网隧道；按 `Ctrl+C` 停止服务。默认使用 `8766`，避免与本机已占用 `8765` 的其他服务冲突。
 
 端口被占用时，可以指定其他端口：
 
 ```powershell
-python -X utf8 scripts/admin_server.py --port 8766 --open-browser
+python -X utf8 scripts/admin_server.py --port 8767 --open-browser
 ```
 
 ### 3. 开始第一次试跑

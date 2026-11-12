@@ -211,7 +211,7 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 
 ## Local management dashboard (2026-11-12)
 
-- Start `scripts/admin_server.py` or `start-admin.cmd` and visit `http://127.0.0.1:8765`. Keep it local-only; no cloud hosting, uploads or public tunnels
+- Start `scripts/admin_server.py` or `start-admin.cmd` and visit `http://127.0.0.1:8766`. Keep it local-only; no cloud hosting, uploads or public tunnels
 - The dashboard provides message search/detail, rule/model settings, local keyword draft previews, bounded manual preview runs and persisted run history. Program collection, deduplication and sending remain in `deal_pipeline.py`
 - All UI-triggered runs must force preview and leave notification markers unchanged. Retain source request gaps, budgets and model caches; prevent overlapping manual runs through the shared run-history lease
 - `deal_config.py` reads the effective settings for both monitor/CLI and the dashboard. Save only supported public settings with atomic replacement and revision checking. Never return API keys, decrypted secrets or private endpoint device keys in HTTP responses
