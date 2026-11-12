@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 from deal_pipeline import main, run
-from notification_delivery import BarkSender, DeliveryError
+from notification_delivery import BarkSender, DeliveryError, WxPusherSender
 from notification_state import NotificationState, message_record
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -357,6 +357,70 @@ class BarkTransportTests(unittest.TestCase):
             self.assertTrue(error.exception.uncertain)
         self.assertEqual(session.post.call_count, 2)
         self.assertFalse(session.post.call_args.kwargs["allow_redirects"])
+
+
+class WxPusherTransportTests(unittest.TestCase):
+    def test_all_followers_mode_discovers_app_followers_without_topic(self):
+        config = copy.deepcopy(BASE)
+        config["provider_state_path"] = None
+        config["delivery"].update(timeout_seconds=1, request_interval_seconds=.001, channel="wxpusher",
+                                  wxpusher={"endpoint": "https://wxpusher.zjiecode.com/api/send/message",
+                                            "user_list_endpoint": "https://wxpusher.zjiecode.com/api/fun/wxuser/v2",
+                                            "app_token_env": "TEST_WXPUSHER_TOKEN",
+                                            "app_token_secret_path": "missing",
+                                            "recipient_mode": "all_followers",
+                                            "topic_ids": []})
+        session = Mock()
+        session.get.return_value.status_code = 200
+        session.get.return_value.json.return_value = {
+            "code": 1000,
+            "data": {"total": 2, "records": [
+                {"uid": "UID_one", "type": 0, "appOrTopicId": 146732, "reject": False},
+                {"uid": "UID_two", "type": 1, "appOrTopicId": 12345, "reject": False},
+            ]},
+        }
+        session.post.return_value.status_code = 200
+        session.post.return_value.json.return_value = {"code": 1000, "data": []}
+        with patch.dict(os.environ, {"TEST_WXPUSHER_TOKEN": "AT_test-token"}):
+            sender = WxPusherSender(config, session=session)
+            receipt = sender.send({"title": "商品", "body": "正文", "url": "https://example.test/item"})
+        self.assertTrue(receipt["confirmed"])
+        self.assertEqual(receipt["recipientCount"], 2)
+        payload = session.post.call_args.kwargs["json"]
+        self.assertEqual(payload["uids"], ["UID_one", "UID_two"])
+        self.assertNotIn("topicIds", payload)
+
+    def test_topic_broadcast_is_accepted_without_exposing_token(self):
+        config = copy.deepcopy(BASE)
+        config["provider_state_path"] = None
+        config["delivery"].update(timeout_seconds=1, request_interval_seconds=.001, channel="wxpusher",
+                                  wxpusher={"endpoint": "https://wxpusher.zjiecode.com/api/send/message",
+                                            "app_token_env": "TEST_WXPUSHER_TOKEN",
+                                            "app_token_secret_path": "missing",
+                                            "topic_ids": [12345]})
+        session = Mock()
+        session.post.return_value.status_code = 200
+        session.post.return_value.json.return_value = {"code": 1000, "data": [{"topicId": 12345, "code": 1000}]}
+        with patch.dict(os.environ, {"TEST_WXPUSHER_TOKEN": "AT_test-token"}):
+            sender = WxPusherSender(config, session=session)
+            receipt = sender.send({"title": "商品" * 80, "body": "正文", "url": "https://example.test/item"})
+        self.assertTrue(receipt["confirmed"])
+        self.assertEqual(receipt["channel"], "wxpusher")
+        payload = session.post.call_args.kwargs["json"]
+        self.assertEqual(payload["topicIds"], [12345])
+        self.assertEqual(payload["contentType"], 1)
+        self.assertLessEqual(len(payload["summary"]), 100)
+        self.assertNotIn("AT_test-token", str(receipt))
+
+    def test_topic_subscription_is_required(self):
+        config = copy.deepcopy(BASE)
+        config["provider_state_path"] = None
+        config["delivery"].update(channel="wxpusher", wxpusher={
+            "endpoint": "https://wxpusher.zjiecode.com/api/send/message",
+            "app_token_env": "TEST_WXPUSHER_TOKEN", "app_token_secret_path": "missing", "topic_ids": []})
+        with patch.dict(os.environ, {"TEST_WXPUSHER_TOKEN": "AT_test-token"}):
+            with self.assertRaises(DeliveryError):
+                WxPusherSender(config, session=Mock())
 
 
 if __name__ == "__main__":

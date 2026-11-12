@@ -36,7 +36,8 @@ class LocalFixture(unittest.TestCase):
         self.monitor = self.directory / "monitor.json"
         self.config = copy.deepcopy(BASE)
         self.config["provider_state_path"] = None
-        self.config["ai"].update(enabled=False, api_key_secret_path="missing-secret", api_key_env="TEST_ABSENT_API_KEY")
+        self.config["ai"].update(enabled=False, api_key_secret_path="missing-secret", api_key_env="TEST_ABSENT_API_KEY",
+                                 api_key_source="none", codex_provider="")
         self.config["delivery"].update(enabled=True, cold_start="send")
         self.path.write_text(json.dumps(self.config), encoding="utf-8")
         self.monitor.write_text(json.dumps({"delivery": {"enabled": False, "notificationStatePath": ".state/notify.db"},

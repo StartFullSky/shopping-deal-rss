@@ -142,6 +142,7 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - If the source only shows a generic cart recommendation instead of a fixed filler SKU, say `凑单商品需在购物车推荐中按再实付差额选择` and include the gap. Do not invent a specific filler product.
 - When screenshots contain the only price breakdown, inspect them before sending. Report only prices visible in the source, and mark an item-level final price as `estimated` when cart-level coupons cannot be allocated to one SKU.
 - Send through `scripts/send_bark.ps1`, which uses HTTPS POST JSON, bounded payload sizes, a bounded timeout, and retries. Do not build a Bark GET URL manually. Do not print or save the Bark key; redact it in reports and logs.
+- For WxPusher broadcasts, use only the official user-list and standard push APIs. `recipient_mode: all_followers` sends to every current app/topic follower through bounded `uids` batches and automatically includes new followers on later runs; `recipient_mode: topic` sends through `topicIds` only to shared-Topic subscribers. Never scrape users, commit secrets, or print the `AT_` app token.
 - Use `send_bark.ps1 -DryRun` for local validation. A dry run reports only payload sizes and the destination host, never the device key.
 - Do not send a notification for an empty search or a failed feed. If no source is reachable, report the failure to the user instead of claiming that no deals exist.
 - If the user supplies only a Bark endpoint but no watch targets, ask for keywords or product links rather than sending broad, noisy alerts. For a requested scheduled monitor, use the automation facility and confirm cadence and trigger thresholds first.
@@ -152,7 +153,7 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - Favor bounded incremental scans, persistent identity/fingerprint state, cold-start suppression, immediate event delivery, and late rechecks over a single large batch.
 - Track delivery failures as pending work and prioritize them on the next run. Never mark a failed notification as sent merely to avoid duplicates.
 - Keep quality decisions explainable. Optional semantic or LLM filters may improve recall/precision later, but they must be disabled by default and must not replace source evidence.
-- Optional Codex CLI price review must research public evidence for the exact product and comparable historical price, require a public source URL and configured confidence/discount threshold, and fail closed on timeout, authentication failure, product mismatch, or insufficient history. Do not log in, open carts, claim coupons, or place orders during review.
+- Optional Codex CLI price review must collect bounded public evidence outside the model, pass it as untrusted JSON, and disable model-side web, browser, computer-use, and app tools. Require a matching recent historical price, public source URL, and configured confidence/discount threshold. A valid AI rejection fails closed; if the AI operation itself times out or fails authentication/tool execution, fall back only to candidates already qualified by rules. Do not log in, open carts, claim coupons, or place orders during review.
 
 ## Safety And Scope
 
@@ -189,11 +190,11 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 
 - This policy supersedes the historical-price, anomaly-score and discount requirements above. The user abandoned price comparison and now wants only physical-product messages
 - Default `price_batch.py`, `product_filter.py` and `monitor.ps1` enter `deal_pipeline.py` using `product-filter-config.json`. Retained price tools require an explicit `--backend` override and must not run in the default path
-- Call Agnes directly with `agnes-3.0-flash`, at most two batches of twenty messages per run. Optional keyword filters and deduplication precede review. Do not invoke Codex CLI, web search, product pages or price tools for classification
+- Call Xiaomi's Responses API with `mimo-v2.6-pro`, at most two batches of twenty messages per run. Optional keyword filters and deduplication precede review. Do not invoke web search, product pages or price tools for product classification; the legacy price reviewer keeps public research outside the model
 - A concrete physical product remains a product when the price, exact category, specification or purchase link is missing. Coupons, membership conditions, rebates and mixed-variant offers do not change product identity. Standalone financial/red-packet/coupon/lottery activities, virtual memberships and discussion are non-products
 - Use prompt-versioned cached classifications. Preserve unknown results and model/network errors without turning them into non-products. The model only receives public item text, never credentials
-- Keep the legacy `ai.enabled` false (Codex reviewer disabled); the separate `product-filter-config.json` AI settings enable the optional direct model classifier. Actual delivery remains disabled pending the user's decision
-- Default model/API settings were verified against https://wiki.agnes-ai.com/en/docs/agnes-30-flash.md and the authenticated model list. Use environment variables or the local DPAPI secret for credentials; never commit or print API keys
+- Keep the legacy `ai.enabled` false (Codex price reviewer disabled); the separate `product-filter-config.json` AI settings enable the optional Xiaomi classifier. The user has authorized scheduled Bark delivery, while manual dashboard trials remain preview-only
+- Load the Xiaomi token from the local Codex provider configuration or `XIAOMI_API_KEY`; use `XIAOMI_BASE_URL` and `XIAOMI_MODEL` for non-secret overrides. Never commit or print API keys
 - Source selection updated 2026-11-12: collect only 酷安 (`kuan`, ID 17) and 微博超话 (`weibo-chaohua`, ID 14), as configured in `product-filter-config.json`. Validate returned category IDs; never substitute ordinary Weibo, Haodan or all-site feeds on failure. Keep the five-second request gap and disabled notification delivery
 
 ## Current architecture: optional AI before program delivery (2026-11-12)
@@ -205,7 +206,7 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - Use `notification_delivery.py` for this pipeline's Bark transport. Persist the sending state before the single HTTP attempt; mark sent only on a confirmed acknowledgement. Retry definite failures through the program queue, bounded by `max_attempts`, `retry_delay_seconds` and `max_per_run`. Do not blindly retry an ambiguous acknowledgement or a process crash during sending
 - The first live cycle records a baseline by default and sends nothing. An empty/failed initial collection does not establish a baseline. Preview/dry-run must not create or change persistent notification markers and must not require Bark credentials
 - `monitor.ps1` passes root delivery settings into the Python pipeline, then exits before the legacy pipeline. Direct Python commands use the product configuration, or `--monitor-config` to use the same root overrides
-- Current authorization is implementation and validation only: retain `delivery.enabled: false` in both configs; validate actual-delivery behavior with simulated senders and isolated state. Do not send real notifications, install a scheduler or reintroduce price comparison
+- Current authorization includes scheduled Bark delivery with `delivery.enabled: true` in both configs. Keep dashboard trials preview-only and preserve the baseline cold start so existing backlog is not sent all at once
 
 ## Local management dashboard (2026-11-12)
 
@@ -214,4 +215,4 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - All UI-triggered runs must force preview and leave notification markers unchanged. Retain source request gaps, budgets and model caches; prevent overlapping manual runs through the shared run-history lease
 - `deal_config.py` reads the effective settings for both monitor/CLI and the dashboard. Save only supported public settings with atomic replacement and revision checking. Never return API keys, decrypted secrets or private endpoint device keys in HTTP responses
 - `run_history.py` keeps audit snapshots and filter reasons in `.state/run-history.sqlite3`, separate from review caches and delivery state. Record original timestamps. Keyword draft tests use the selected batch's capture time; complete snapshot reruns use current freshness rules
-- Opening or refreshing the page reads local records only. Fetch public feeds or call a model only when a user starts the corresponding trial, and keep real push delivery disabled under the current authorization
+- Opening or refreshing the page reads local records only. Fetch public feeds or call a model only when a user starts the corresponding trial, and keep dashboard trial delivery disabled even when scheduled delivery is enabled

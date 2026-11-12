@@ -53,8 +53,11 @@ def body_text(item):
 
 def model_settings(config):
     ai = {**config["ai"]}
-    ai["base_url"] = os.environ.get(ai.get("base_url_env", "AGNES_BASE_URL")) or ai["base_url"]
-    ai["model"] = os.environ.get(ai.get("model_env", "AGNES_MODEL")) or ai["model"]
+    ai["base_url"] = os.environ.get(ai.get("base_url_env", "MODEL_BASE_URL")) or ai["base_url"]
+    ai["model"] = os.environ.get(ai.get("model_env", "MODEL_MODEL")) or ai["model"]
+    ai.setdefault("api_kind", "chat_completions")
+    if ai["api_kind"] not in ("chat_completions", "responses"):
+        raise ValueError("unsupported_model_api_kind")
     parsed = urlparse(ai["base_url"])
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("model_base_url_must_be_https_without_credentials_or_query")
@@ -69,7 +72,7 @@ def payload_item(item, limit):
 def cache_key(item, ai):
     data = payload_item(item, ai["max_content_chars"])
     data.pop("id")
-    raw = json.dumps([PROMPT_VERSION, ai["base_url"], ai["model"], data], ensure_ascii=False, sort_keys=True)
+    raw = json.dumps([PROMPT_VERSION, ai["api_kind"], ai["base_url"], ai["model"], data], ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -145,14 +148,22 @@ class ProductClient:
             timeout = min(self.ai["timeout_seconds"], self.deadline - time.monotonic())
             if timeout <= 0:
                 raise RuntimeError("classification_batch_timeout")
-            request = {"model": self.ai["model"], "temperature": 0, "max_tokens": self.ai["max_tokens"],
-                       "stream": False, "chat_template_kwargs": {"enable_thinking": False},
-                       "messages": [{"role": "system", "content": SYSTEM},
-                                    {"role": "user", "content": json.dumps({"items": [payload_item(i, self.ai["max_content_chars"]) for i in batch]}, ensure_ascii=False)}]}
+            user_content = json.dumps({"items": [payload_item(i, self.ai["max_content_chars"]) for i in batch]}, ensure_ascii=False)
+            if self.ai["api_kind"] == "responses":
+                endpoint = self.ai["base_url"] + "/responses"
+                request = {"model": self.ai["model"], "temperature": 0, "max_output_tokens": self.ai["max_tokens"],
+                           "input": [{"role": "system", "content": [{"type": "input_text", "text": SYSTEM}]},
+                                     {"role": "user", "content": [{"type": "input_text", "text": user_content}]}]}
+            else:
+                endpoint = self.ai["base_url"] + "/chat/completions"
+                request = {"model": self.ai["model"], "temperature": 0, "max_tokens": self.ai["max_tokens"],
+                           "stream": False, "chat_template_kwargs": {"enable_thinking": False},
+                           "messages": [{"role": "system", "content": SYSTEM},
+                                        {"role": "user", "content": user_content}]}
             self.stats["requests"] += 1
             started = time.monotonic()
             try:
-                response = self.session.post(self.ai["base_url"] + "/chat/completions", json=request,
+                response = self.session.post(endpoint, json=request,
                                              headers={"Authorization": "Bearer " + self.key},
                                              timeout=timeout, allow_redirects=False)
             except requests.RequestException as error:
@@ -163,6 +174,24 @@ class ProductClient:
                 raise RuntimeError("model_http_" + str(response.status_code))
             try:
                 data = response.json()
+            except ValueError:
+                raise ValueError("invalid_model_response") from None
+            try:
+                if self.ai["api_kind"] == "responses":
+                    if data.get("status") not in (None, "completed"):
+                        raise ValueError("incomplete_model_response")
+                    texts = []
+                    for output in data.get("output", []):
+                        if output.get("type") != "message":
+                            continue
+                        for content in output.get("content", []):
+                            if content.get("type") in ("output_text", "text") and isinstance(content.get("text"), str):
+                                texts.append(content["text"])
+                    usage = data.get("usage") or {}
+                    self.stats["prompt_tokens"] += int(usage.get("input_tokens") or 0)
+                    self.stats["completion_tokens"] += int(usage.get("output_tokens") or 0)
+                    self.stats["total_tokens"] += int(usage.get("total_tokens") or 0)
+                    return parse_verdicts("\n".join(texts), {str(i["id"]) for i in batch})
                 choice = data["choices"][0]
                 if choice.get("finish_reason") not in (None, "stop"):
                     raise ValueError("incomplete_model_response")

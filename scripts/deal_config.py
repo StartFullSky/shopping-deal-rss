@@ -16,8 +16,16 @@ DELIVERY_DEFAULTS = {
     "enabled": False, "state_path": ".state/notifications.sqlite3", "cold_start": "baseline",
     "max_per_run": 2, "max_attempts": 3, "retry_delay_seconds": 60,
     "lease_seconds": 180, "dedup_seconds": 604800, "timeout_seconds": 10,
-    "request_interval_seconds": 5, "endpoint_env": "BARK_URL",
+    "request_interval_seconds": 5, "channel": "bark", "endpoint_env": "BARK_URL",
     "secret_path": "%USERPROFILE%/.codex/secrets/shopping-deal-rss-bark.bin",
+    "wxpusher": {
+        "endpoint": "https://wxpusher.zjiecode.com/api/send/message",
+        "user_list_endpoint": "https://wxpusher.zjiecode.com/api/fun/wxuser/v2",
+        "app_token_env": "WXPUSHER_APP_TOKEN",
+        "app_token_secret_path": "%USERPROFILE%/.codex/secrets/shopping-deal-rss-wxpusher.bin",
+        "recipient_mode": "topic",
+        "topic_ids": [],
+    },
 }
 EDITABLE = {"include_keywords", "exclude_keywords", "max_age_minutes", "max_items",
             "feed_limit", "search_interval_seconds", "ai"}
@@ -48,16 +56,23 @@ def load_config(config_path, monitor_path=None):
     path = pathlib.Path(config_path).resolve()
     config = json.loads(path.read_text(encoding="utf-8-sig"))
     config["delivery"] = {**DELIVERY_DEFAULTS, **config.get("delivery", {})}
+    config["delivery"]["wxpusher"] = {**DELIVERY_DEFAULTS["wxpusher"], **config.get("delivery", {}).get("wxpusher", {})}
     if monitor_path:
         monitor = json.loads(pathlib.Path(monitor_path).read_text(encoding="utf-8-sig"))
         delivery = monitor.get("delivery", {})
         config["delivery"]["enabled"] = bool(delivery.get("enabled", False))
+        if delivery.get("channel"):
+            config["delivery"]["channel"] = delivery["channel"]
         for source, target in (("barkSecretPath", "secret_path"), ("notificationStatePath", "state_path")):
             if delivery.get(source):
                 config["delivery"][target] = delivery[source]
+        if delivery.get("wxpusher"):
+            config["delivery"]["wxpusher"] = {**config["delivery"]["wxpusher"], **delivery["wxpusher"]}
         config["delivery"]["max_per_run"] = monitor.get("monitor", {}).get("maxAlertsPerRun", config["delivery"]["max_per_run"])
     for key in ("state_path", "secret_path"):
         config["delivery"][key] = str(resolve_path(config["delivery"][key], path.parent))
+    wxpusher = config["delivery"]["wxpusher"]
+    wxpusher["app_token_secret_path"] = str(resolve_path(wxpusher["app_token_secret_path"], path.parent))
     for key, default in (("history_path", ".state/run-history.sqlite3"), ("provider_state_path", None)):
         if config.get(key, default):
             config[key] = str(resolve_path(config.get(key, default), path.parent))
@@ -122,16 +137,18 @@ def view(config_path, monitor_path=None):
     with LOCK:
         config = load_config(config_path, monitor_path)
         ai = config.get("ai", {})
-        env_key = bool(os.environ.get(ai.get("api_key_env", "AGNES_API_KEY"), "").strip())
+        env_key = bool(os.environ.get(ai.get("api_key_env", "MODEL_API_KEY"), "").strip())
         secret = ai.get("api_key_secret_path")
         local_key = bool(secret and resolve_path(secret, pathlib.Path(config_path).resolve().parent).is_file())
+        codex_key = ai.get("api_key_source") == "codex_config"
         return {"revision": revision(config_path, monitor_path), "settings": settings(config),
                 "sources": config["feed_categories"], "delivery_enabled": config["delivery"]["enabled"],
-                "credential": {"configured": env_key or local_key, "source": "environment" if env_key else "local" if local_key else "none"},
-                "effective_model": os.environ.get(ai.get("model_env", "AGNES_MODEL")) or ai.get("model"),
-                "effective_base_url": os.environ.get(ai.get("base_url_env", "AGNES_BASE_URL")) or ai.get("base_url"),
+                "credential": {"configured": env_key or local_key or codex_key,
+                               "source": "environment" if env_key else "local" if local_key else "codex-config" if codex_key else "none"},
+                "effective_model": os.environ.get(ai.get("model_env", "MODEL_MODEL")) or ai.get("model"),
+                "effective_base_url": os.environ.get(ai.get("base_url_env", "MODEL_BASE_URL")) or ai.get("base_url"),
                 "environment_overrides": {key: bool(os.environ.get(ai.get(key + "_env", default)))
-                                          for key, default in (("model", "AGNES_MODEL"), ("base_url", "AGNES_BASE_URL"))}}
+                                          for key, default in (("model", "MODEL_MODEL"), ("base_url", "MODEL_BASE_URL"))}}
 
 
 def save(config_path, monitor_path, patch, expected_revision):

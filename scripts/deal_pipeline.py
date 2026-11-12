@@ -9,7 +9,7 @@ import uuid
 from urllib.parse import urlparse
 
 from deal_config import DELIVERY_DEFAULTS, load_config, revision, settings
-from notification_delivery import BarkSender, DeliveryError
+from notification_delivery import BarkSender, DeliveryError, WxPusherSender
 from notification_state import NotificationState, message_record
 from product_filter import body_text, run as review_products, select_items
 
@@ -152,7 +152,14 @@ def run(items, config, cache_path, state_path=None, sender=None, review_client=N
             return report
         if eligible and sender is None:
             try:
-                sender = BarkSender({**config, "delivery": delivery})
+                sender_config = {**config, "delivery": delivery}
+                channel = delivery.get("channel", "bark")
+                if channel == "wxpusher":
+                    sender = WxPusherSender(sender_config)
+                elif channel == "bark":
+                    sender = BarkSender(sender_config)
+                else:
+                    raise DeliveryError("unknown_delivery_channel")
             except Exception as error:
                 errors.append("delivery_configuration_" + type(error).__name__)
                 for _, _, row in eligible:

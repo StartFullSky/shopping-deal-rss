@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
-from model_auth import load_api_key
+from model_auth import load_api_key, load_codex_provider_token
 from product_filter import ProductClient, cache_key, model_settings, parse_verdicts, run, select_items
 from price_batch import main as batch_main
 from price_batch import collect
@@ -174,14 +174,37 @@ class ProductFilterTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "^model_http_401$"):
                 client.review([item(1, "牛奶")])
         args, kwargs = session.post.call_args
-        self.assertTrue(args[0].endswith("/chat/completions"))
+        self.assertTrue(args[0].endswith("/responses"))
         self.assertFalse(kwargs["allow_redirects"])
         self.assertNotIn("tools", kwargs["json"])
+        self.assertEqual([entry["role"] for entry in kwargs["json"]["input"]], ["system", "user"])
+        self.assertNotIn("web_search", kwargs["json"])
+
+    def test_chat_completions_adapter_remains_supported(self):
+        config = copy.deepcopy(CONFIG)
+        config["ai"].update(api_kind="chat_completions", api_key_env="PRODUCT_TEST_API_KEY", request_interval_seconds=.001)
+        session = Mock()
+        session.post.return_value.status_code = 401
+        with patch.dict(os.environ, {"PRODUCT_TEST_API_KEY": "test-key"}):
+            client = ProductClient(config, model_settings(config), time.monotonic() + 5, session)
+            with self.assertRaisesRegex(RuntimeError, "^model_http_401$"):
+                client.review([item(1, "牛奶")])
+        args, kwargs = session.post.call_args
+        self.assertTrue(args[0].endswith("/chat/completions"))
         self.assertFalse(kwargs["json"]["chat_template_kwargs"]["enable_thinking"])
 
     def test_environment_credential_takes_precedence_over_local_secret(self):
         with patch.dict(os.environ, {"PRODUCT_TEST_API_KEY": "test-key"}):
             self.assertEqual(load_api_key({"api_key_env": "PRODUCT_TEST_API_KEY", "api_key_secret_path": "missing"}), "test-key")
+
+    def test_codex_provider_token_is_loaded_without_being_reported(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = pathlib.Path(temp)
+            (home / "config.toml").write_text('[model_providers.xiaomi]\nexperimental_bearer_token = "local-test-token"\n', encoding="utf-8")
+            with patch.dict(os.environ, {"CODEX_HOME": temp, "XIAOMI_API_KEY": ""}):
+                self.assertEqual(load_codex_provider_token("xiaomi"), "local-test-token")
+                self.assertEqual(load_api_key({"api_key_source": "codex_config", "codex_provider": "xiaomi",
+                                               "api_key_env": "XIAOMI_API_KEY", "api_key_secret_path": ""}), "local-test-token")
 
     def test_model_endpoint_does_not_accept_query_credentials_or_plain_http(self):
         for url in ("http://example.com/v1", "https://user:pass@example.com/v1", "https://example.com/v1?key=secret"):

@@ -34,7 +34,7 @@ foreach ($title in $nonBookTitles) {
 if ($config.mode -eq "product_only") {
     Assert-True (-not [bool]$config.quality.requireHistoricalPrice) "Product-only mode must not require historical prices."
     Assert-True ([double]$config.quality.minHistoricalDiscountPct -eq 0) "Product-only mode must not gate on discounts."
-    Assert-True (-not [bool]$config.delivery.enabled) "Product-only evaluation must keep delivery disabled."
+    Assert-True ([bool]$config.delivery.enabled) "User-authorized product-only monitoring must keep delivery enabled."
 } else {
     Assert-True ([double]$config.quality.minHistoricalDiscountPct -ge 30) "Historical discount threshold should be at least 30 percent."
     Assert-True ([bool]$config.quality.requireHistoricalPrice) "Historical price evidence should be required."

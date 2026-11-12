@@ -23,7 +23,7 @@
   },
   "ai": {
     "enabled": false,
-    "model": "",
+    "model": "mimo-v2.6-pro",
     "codexCommandPath": "",
     "minConfidence": 0.8,
     "minHistoricalDiscountPct": 30,
@@ -31,8 +31,17 @@
     "timeoutSec": 30
   },
   "delivery": {
-    "enabled": false,
+    "enabled": true,
+    "channel": "wxpusher",
     "barkSecretPath": "%USERPROFILE%\\.codex\\secrets\\shopping-deal-rss-bark.bin",
+    "wxpusher": {
+      "endpoint": "https://wxpusher.zjiecode.com/api/send/message",
+      "user_list_endpoint": "https://wxpusher.zjiecode.com/api/fun/wxuser/v2",
+      "app_token_env": "WXPUSHER_APP_TOKEN",
+      "app_token_secret_path": "%USERPROFILE%\\.codex\\secrets\\shopping-deal-rss-wxpusher.bin",
+      "recipient_mode": "all_followers",
+      "topic_ids": []
+    },
     "notificationStatePath": ".state/notifications.sqlite3",
     "statePath": "%USERPROFILE%\\.codex\\state\\shopping-deal-rss-state.json",
     "resultPath": "%USERPROFILE%\\.codex\\state\\shopping-deal-rss-last-run.json"
