@@ -1027,6 +1027,41 @@ $config = Get-Content -LiteralPath $resolvedConfigPath -Raw -Encoding UTF8 | Con
 $network = Get-PropertyValue $config @("network") $null
 $monitor = Get-PropertyValue $config @("monitor") $null
 $delivery = Get-PropertyValue $config @("delivery") $null
+if (-not [bool](Get-PropertyValue $delivery @("enabled") $true)) {
+    $DryRun = $true
+}
+if ((Get-PropertyValue $config @("mode") "legacy") -eq "product_only") {
+    $productSettings = Get-PropertyValue $config @("productFilter") $null
+    $productConfigValue = [string](Get-PropertyValue $productSettings @("configPath") "product-filter-config.json")
+    $productConfigPath = if ([IO.Path]::IsPathRooted($productConfigValue)) {
+        $productConfigValue
+    } else {
+        Join-Path (Split-Path -Parent $resolvedConfigPath) $productConfigValue
+    }
+    $productPythonName = [string](Get-PropertyValue $productSettings @("pythonCommand") "python")
+    $productPythonPath = (Get-Command -Name $productPythonName -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $productResultPath = Expand-ConfigValue ([string](Get-PropertyValue $delivery @("resultPath") ""))
+    if (-not $productResultPath) {
+        $productResultPath = Join-Path (Split-Path -Parent $PSScriptRoot) "price-runs/product-latest.json"
+    }
+    $savedProductEncoding = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+        $productArguments = @("-X", "utf8", (Join-Path $PSScriptRoot "deal_pipeline.py"), "--config", $productConfigPath,
+            "--monitor-config", $resolvedConfigPath, "--output", $productResultPath, "--json-stdout")
+        if ($DryRun) {
+            $productArguments += "--dry-run"
+        }
+        $productJson = & $productPythonPath @productArguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "Product classification process failed with exit code $LASTEXITCODE"
+        }
+        $productJson
+    } finally {
+        [Console]::OutputEncoding = $savedProductEncoding
+    }
+    return
+}
 $rules = Get-PropertyValue $config @("rules") $null
 $proxyUrl = Expand-ConfigValue ([string](Get-PropertyValue $network @("proxyUrl") ""))
 $proxyDisabled = [bool](Get-PropertyValue $network @("proxyDisabled") $false)

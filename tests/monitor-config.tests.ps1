@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -31,8 +31,14 @@ $nonBookTitles = @(
 foreach ($title in $nonBookTitles) {
     Assert-True (-not ($title -match $bookPattern)) "Non-book product should not be excluded: $title"
 }
-Assert-True ([double]$config.quality.minHistoricalDiscountPct -ge 30) "Historical discount threshold should be at least 30 percent."
-Assert-True ([bool]$config.quality.requireHistoricalPrice) "Historical price evidence should be required."
+if ($config.mode -eq "product_only") {
+    Assert-True (-not [bool]$config.quality.requireHistoricalPrice) "Product-only mode must not require historical prices."
+    Assert-True ([double]$config.quality.minHistoricalDiscountPct -eq 0) "Product-only mode must not gate on discounts."
+    Assert-True (-not [bool]$config.delivery.enabled) "Product-only evaluation must keep delivery disabled."
+} else {
+    Assert-True ([double]$config.quality.minHistoricalDiscountPct -ge 30) "Historical discount threshold should be at least 30 percent."
+    Assert-True ([bool]$config.quality.requireHistoricalPrice) "Historical price evidence should be required."
+}
 $couponStackText = @'
 伯希和 山野2.0Pro 三合一冲锋衣
 348亓❗高品质❗这次不用金帀❗
@@ -47,5 +53,5 @@ Assert-True (-not ($ordinaryProductText -match $couponStackPattern)) "Ordinary p
 
 [pscustomobject]@{
     status = "passed"
-    assertions = 12
+    assertions = if ($config.mode -eq "product_only") { 13 } else { 12 }
 } | ConvertTo-Json -Compress

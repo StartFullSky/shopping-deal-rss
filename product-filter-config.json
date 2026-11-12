@@ -1,0 +1,57 @@
+{
+  "mode": "product_only",
+  "feed_categories": [
+    "kuan",
+    "weibo-chaohua"
+  ],
+  "feed_category_ids": {
+    "kuan": 17,
+    "weibo-chaohua": 14
+  },
+  "feed_limit": 20,
+  "max_items": 40,
+  "max_age_minutes": 120,
+  "include_keywords": [],
+  "exclude_keywords": [],
+  "batch_timeout_seconds": 120,
+  "request_timeout_seconds": 8,
+  "workers": 1,
+  "max_requests_per_batch": 4,
+  "search_interval_seconds": 5,
+  "provider_state_path": ".price-cache/provider-state.sqlite3",
+  "history_path": ".state/run-history.sqlite3",
+  "classification_cache_seconds": 604800,
+  "unknown_cache_seconds": 300,
+  "ai": {
+    "enabled": true,
+    "on_error": "bypass",
+    "on_unknown": "bypass",
+    "base_url": "https://apihub.agnes-ai.com/v1",
+    "base_url_env": "AGNES_BASE_URL",
+    "model": "agnes-3.0-flash",
+    "model_env": "AGNES_MODEL",
+    "api_key_env": "AGNES_API_KEY",
+    "api_key_secret_path": "%USERPROFILE%/.codex/secrets/shopping-deal-rss-agnes.bin",
+    "batch_size": 20,
+    "max_batches_per_run": 2,
+    "timeout_seconds": 35,
+    "request_interval_seconds": 5,
+    "max_tokens": 5000,
+    "max_content_chars": 700
+  },
+  "delivery": {
+    "enabled": false,
+    "channel": "bark",
+    "endpoint_env": "BARK_URL",
+    "secret_path": "%USERPROFILE%/.codex/secrets/shopping-deal-rss-bark.bin",
+    "state_path": ".state/notifications.sqlite3",
+    "cold_start": "baseline",
+    "max_per_run": 2,
+    "max_attempts": 3,
+    "retry_delay_seconds": 60,
+    "lease_seconds": 180,
+    "dedup_seconds": 604800,
+    "timeout_seconds": 10,
+    "request_interval_seconds": 5
+  }
+}
