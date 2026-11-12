@@ -160,3 +160,58 @@ Mark missing timestamps or unavailable fields explicitly. Preserve direct source
 - Do not scrape beyond the documented RSSHub routes merely because a public webpage is accessible.
 - Respect source terms, reasonable request rates, and local law. Avoid rapid repeated polling.
 - Do not promise price accuracy, stock availability, coupon applicability, seller quality, or legality of a resale/activity scheme.
+
+## Bounded batch reference checks
+
+- The user's explicitly selected SMZDM-reference policy is available through `scripts/price_batch.py`; it is separate from the historical-price/Codex-CLI review path in the legacy scheduled monitor
+- Run `python scripts/price_batch.py --output price-runs/latest.json` for a new snapshot, or supply `--input` with a frozen snapshot for a comparable cache replay
+- Configuration, concurrency, request budgets, cache TTLs and timeout settings live in `batch-price-config.json`; do not silently remove limits to improve a benchmark
+- 360 is primary; its CAPTCHA/403/429 failures stop that source for the current batch and record the reason. A new batch may retry at the configured rate. Optional `exa_free` fallback uses the anonymous hosted MCP. Prices still come only from SMZDM encyclopedia pages
+- Report provider failures, successful-price coverage, candidate counts and network requests alongside elapsed time. A fast unknown result is not a successful price check
+- Preserve cash-payment and pack-count distinctions, reference membership conditions, category-estimate labels and source timestamps. Do not turn sparse or missing reference data into a negative deal verdict
+- Batch output contains candidates only. It does not call a model or deliver notifications; include those stages separately when measuring a complete monitor
+- Keep each provider serial: after a request completes, wait at least the configured gap (default 360/Exa five seconds, SMZDM a random five to ten seconds). Two workers may overlap different providers; cache hits need no network wait
+- Preserve `provider_state_path` across batches and processes, even when changing `--cache`, to keep request gaps. Do not add locally generated cooldowns or escalating backoff. Ignore legacy cooldown/health records; an explicit server `Retry-After` still sets the earliest next request time
+- These intervals are conservative defaults, not published quotas. Report deliberate `rate_wait_seconds` separately; the earlier fast cold-run benchmark used shorter intervals
+
+## Current Xianbao category-price evaluation
+
+- The default backend is now `xianbao_history`, using only the public JSON feed and search APIs. Use the SMZDM path only with an explicit `--backend smzdm` override
+- Search the general category with one keyword at a time; use `history_category_synonyms` as separate fallbacks for noisy results. Live tests showed OR combinations could dilute relevance. Keep the existing two-request cap, using the second for a synonym or a deeper relevant page
+- Group repeated quotes by merchant product ID or normalised title/brand/model before calculating any category reference. Different pack sizes of the same product do not add independent product samples
+- Select 5–10 different products by default (`history_min_samples: 5`, `history_max_products: 10`), rotate brands among recent products, and take the median of each product's historical unit-price median. Never select by lowest or highest price
+- Return once five different products are available; do not wait for ten. Recognise colloquial cash/unit prices and explicit body specifications. When only packaging counts can be compared, label the estimate and never invent missing volume
+- A lead meets the numerical gate at least `min_discount_pct` (default 20) below that reference. These are historical promotional category estimates, not verified market or checkout prices
+- Keep insufficient distinct-product coverage unknown. Report selected product counts, original quote counts, query pages, network requests, deliberate rate waits and source conditions
+- The current user explicitly requested report-only testing: keep `delivery.enabled` and `ai.enabled` false, do not send Bark notifications or install a scheduler
+
+## Current policy: product classification only (2026-11-11)
+
+- This policy supersedes the historical-price, anomaly-score and discount requirements above. The user abandoned price comparison and now wants only physical-product messages
+- Default `price_batch.py`, `product_filter.py` and `monitor.ps1` enter `deal_pipeline.py` using `product-filter-config.json`. Retained price tools require an explicit `--backend` override and must not run in the default path
+- Call Agnes directly with `agnes-3.0-flash`, at most two batches of twenty messages per run. Optional keyword filters and deduplication precede review. Do not invoke Codex CLI, web search, product pages or price tools for classification
+- A concrete physical product remains a product when the price, exact category, specification or purchase link is missing. Coupons, membership conditions, rebates and mixed-variant offers do not change product identity. Standalone financial/red-packet/coupon/lottery activities, virtual memberships and discussion are non-products
+- Use prompt-versioned cached classifications. Preserve unknown results and model/network errors without turning them into non-products. The model only receives public item text, never credentials
+- Keep the legacy `ai.enabled` false (Codex reviewer disabled); the separate `product-filter-config.json` AI settings enable the optional direct model classifier. Actual delivery remains disabled pending the user's decision
+- Default model/API settings were verified against https://wiki.agnes-ai.com/en/docs/agnes-30-flash.md and the authenticated model list. Use environment variables or the local DPAPI secret for credentials; never commit or print API keys
+- Source selection updated 2026-11-12: collect only 酷安 (`kuan`, ID 17) and 微博超话 (`weibo-chaohua`, ID 14), as configured in `product-filter-config.json`. Validate returned category IDs; never substitute ordinary Weibo, Haodan or all-site feeds on failure. Keep the five-second request gap and disabled notification delivery
+
+## Current architecture: optional AI before program delivery (2026-11-12)
+
+- This section supersedes earlier mandatory-review, fail-closed and legacy state/delivery instructions for `mode: product_only`. The program owns source collection, keyword/freshness rules, request budgets, persistent deduplication, queueing, sending and retries. Never grant the review model collection, notification or state-writing tools
+- `ai.enabled: false` or `--no-ai` skips all model calls, model settings/credentials and review-cache access. Local-rule-eligible messages remain eligible; do not label them AI-confirmed products
+- An explicit AI `is_product: false` blocks delivery. Errors and unknown results use `ai.on_error` / `ai.on_unknown`, default `bypass` (continue with local rules), optionally `defer` (keep pending). Do not turn missing model results into rejection or permanently mark AI-rejected items sent
+- Store model conclusions in the review cache and notification lifecycle in the separate `delivery.state_path` SQLite outbox. Evaluate persistent deduplication before review. Lease queued items during review; confirm ownership before sending
+- Use `notification_delivery.py` for this pipeline's Bark transport. Persist the sending state before the single HTTP attempt; mark sent only on a confirmed acknowledgement. Retry definite failures through the program queue, bounded by `max_attempts`, `retry_delay_seconds` and `max_per_run`. Do not blindly retry an ambiguous acknowledgement or a process crash during sending
+- The first live cycle records a baseline by default and sends nothing. An empty/failed initial collection does not establish a baseline. Preview/dry-run must not create or change persistent notification markers and must not require Bark credentials
+- `monitor.ps1` passes root delivery settings into the Python pipeline, then exits before the legacy pipeline. Direct Python commands use the product configuration, or `--monitor-config` to use the same root overrides
+- Current authorization is implementation and validation only: retain `delivery.enabled: false` in both configs; validate actual-delivery behavior with simulated senders and isolated state. Do not send real notifications, install a scheduler or reintroduce price comparison
+
+## Local management dashboard (2026-11-12)
+
+- Start `scripts/admin_server.py` or `start-admin.cmd` and visit `http://127.0.0.1:8765`. Keep it local-only; no cloud hosting, uploads or public tunnels
+- The dashboard provides message search/detail, rule/model settings, local keyword draft previews, bounded manual preview runs and persisted run history. Program collection, deduplication and sending remain in `deal_pipeline.py`
+- All UI-triggered runs must force preview and leave notification markers unchanged. Retain source request gaps, budgets and model caches; prevent overlapping manual runs through the shared run-history lease
+- `deal_config.py` reads the effective settings for both monitor/CLI and the dashboard. Save only supported public settings with atomic replacement and revision checking. Never return API keys, decrypted secrets or private endpoint device keys in HTTP responses
+- `run_history.py` keeps audit snapshots and filter reasons in `.state/run-history.sqlite3`, separate from review caches and delivery state. Record original timestamps. Keyword draft tests use the selected batch's capture time; complete snapshot reruns use current freshness rules
+- Opening or refreshing the page reads local records only. Fetch public feeds or call a model only when a user starts the corresponding trial, and keep real push delivery disabled under the current authorization

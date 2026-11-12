@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>线报工作台 · Deal Desk</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="#deals" aria-label="线报工作台首页">
+      <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12.4V5a2 2 0 0 1 2-2h7.4a2 2 0 0 1 1.4.6l7 7a2 2 0 0 1 0 2.8l-7.4 7.4a2 2 0 0 1-2.8 0l-7-7a2 2 0 0 1-.6-1.4Z" stroke="currentColor" stroke-width="1.7"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg></span>
+      <span><strong>线报工作台</strong><small>DEAL DESK</small></span>
+    </a>
+    <div class="nav-label">工作空间</div>
+    <nav aria-label="主导航">
+      <button class="nav-item active" data-page="deals"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>线报列表<span id="navCount" class="nav-count">0</span></button>
+      <button class="nav-item" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></svg>规则配置</button>
+      <button class="nav-item" data-page="history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2"/></svg>试跑记录</button>
+    </nav>
+    <div class="source-card"><div class="eyebrow">当前数据来源 <span class="small-dot"></span></div><div class="source-line"><span class="source-icon cool">酷</span>酷安<span>已启用</span></div><div class="source-line"><span class="source-icon weibo">微</span>微博超话<span>已启用</span></div><p>请求串行执行，沿用全局限速。</p></div>
+    <div class="sidebar-bottom"><span class="connection-dot"></span><span>本地工作空间<small>127.0.0.1 · 数据保存在本机</small></span></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar"><div class="breadcrumb">工作空间<span>/</span><span id="breadcrumb">线报列表</span></div><div class="preview-pill"><span></span>预览模式 · 本页试跑不发送</div></header>
+    <div class="page-heading"><div><div class="eyebrow" id="pageEyebrow">DISCOVER & REVIEW</div><h1 id="pageTitle">每一条线报，都有据可查。</h1><p id="pageDescription">查看筛选结果，理解每一次保留与排除。</p></div><button class="button primary" id="openTrial"><span class="play-icon">▶</span>开始试跑</button></div>
+    <div id="activeBanner" class="active-banner" hidden><span class="spinner"></span><div><strong id="activeTitle">正在采集线报</strong><p id="activeDescription">任务在本地程序中执行，页面仅查看进度。</p></div><span id="activeElapsed"></span></div>
+    <div id="pageAlert" class="alert" role="status" hidden></div>
+
+    <section id="page-deals" class="page">
+      <div class="stats-grid">
+        <article class="stat-card"><div class="stat-label">本批采集 <span class="stat-symbol">↙</span></div><div class="stat-value" id="statInput">—</div><p id="statSources">等待首次采集</p></article>
+        <article class="stat-card"><div class="stat-label">筛选后待审核 <span class="stat-symbol">≋</span></div><div class="stat-value" id="statSelected">—</div><p>来源、时效、关键词与去重之后</p></article>
+        <article class="stat-card accent"><div class="stat-label">最终保留 <span class="stat-symbol">✓</span></div><div class="stat-value" id="statEligible">—</div><p id="statReview">根据当前规则判断</p></article>
+        <article class="stat-card"><div class="stat-label">本轮耗时 <span class="stat-symbol">◷</span></div><div class="stat-value" id="statElapsed">—</div><p id="statWait">包含限速等待时间</p></article>
+      </div>
+      <section class="panel deals-panel">
+        <div class="panel-heading"><div><h2>线报明细 <span id="resultCount" class="count-label">0 条</span></h2><p id="batchCaption">开始一次试跑，查看完整筛选过程。</p></div><button class="button subtle small" id="refreshRuns">↻ 刷新记录</button></div>
+        <div class="table-tools"><div class="filter-tabs" role="group" aria-label="筛选结果"><button class="selected" data-filter="all">全部<span id="tabAll">0</span></button><button data-filter="kept">保留<span id="tabKept">0</span></button><button data-filter="rules">程序过滤<span id="tabRules">0</span></button><button data-filter="ai">AI 排除<span id="tabAi">0</span></button><button data-filter="deferred">暂缓<span id="tabDeferred">0</span></button></div><div class="search-tools"><label class="search-box"><span>⌕</span><input id="search" type="search" placeholder="搜索商品、标题或正文" aria-label="搜索线报"></label><select id="sourceFilter" aria-label="筛选来源"><option value="all">全部来源</option><option value="kuan">酷安</option><option value="weibo-chaohua">微博超话</option></select></div></div>
+        <div class="table-wrap"><table class="deals-table"><thead><tr><th class="item-column">商品 / 线报内容</th><th>来源</th><th>筛选结果</th><th>判断依据</th><th>发布时间</th><th><span class="sr-only">操作</span></th></tr></thead><tbody id="dealRows"></tbody></table></div>
+        <div id="emptyDeals" class="empty-state"><div class="empty-icon">⌕</div><h3>还没有试跑数据</h3><p>从酷安和微博超话采集一批线报，筛选过程会显示在这里。</p><button class="button secondary" id="emptyTrial">开始第一次试跑</button></div>
+        <div class="table-footer"><span id="tableInfo">共 0 条</span><div class="pagination"><button id="previousPage" class="icon-button" aria-label="上一页">‹</button><span id="pageNumber">1 / 1</span><button id="nextPage" class="icon-button" aria-label="下一页">›</button></div></div>
+      </section>
+      <div class="footnote"><span class="small-dot"></span>先由程序执行规则与去重，再按需调用 AI；所有结论均可查看原文。</div>
+    </section>
+
+    <section id="page-settings" class="page" hidden>
+      <form id="settingsForm">
+        <div class="settings-grid">
+          <div class="settings-main">
+            <section class="panel config-panel"><div class="section-heading"><span class="step-number">01</span><div><h2>关键词规则</h2><p>匹配标题和正文，每行一个词；列表内命中任意一个即生效。</p></div><span class="tag neutral">程序执行</span></div><div class="keyword-grid"><label class="field">包含关键词 <span class="field-hint">可选</span><textarea id="includeKeywords" rows="6" placeholder="例如：沐浴露&#10;洗发水&#10;纸巾"></textarea><small>留空保留全部品类；填写后，仅保留命中消息。</small></label><label class="field">排除关键词 <span class="field-hint">可选</span><textarea id="excludeKeywords" rows="6" placeholder="例如：求购&#10;二手&#10;抽奖"></textarea><small>命中即排除；同时命中包含词时，也会排除。</small></label></div><div class="inline-note">建议先试算再保存。比如排除“会员”，也可能过滤“会员价洗发水”。</div></section>
+            <section class="panel config-panel"><div class="section-heading"><span class="step-number">02</span><div><h2>采集与处理范围</h2><p>控制消息时效、批次大小和请求频率。</p></div></div><div class="form-grid"><label class="field">消息有效期<div class="input-unit"><input id="maxAge" type="number" min="1" max="1440" required><span>分钟</span></div></label><label class="field">每轮处理上限<div class="input-unit"><input id="maxItems" type="number" min="1" max="100" required><span>条</span></div></label><label class="field">每个来源采集上限<div class="input-unit"><input id="feedLimit" type="number" min="1" max="20" required><span>条</span></div></label><label class="field">来源请求间隔<div class="input-unit"><input id="requestGap" type="number" min="5" max="60" required><span>秒</span></div></label></div></section>
+            <section class="panel config-panel"><div class="section-heading"><span class="step-number">03</span><div><h2>可选 AI 复核</h2><p>当前只判断是否为实物商品消息。</p></div><label class="switch"><input id="aiEnabled" type="checkbox" aria-label="启用 AI 复核"><span></span></label></div><div class="form-grid"><label class="field full">API Base URL<input id="modelBaseUrl" type="url" required placeholder="https://…/v1"><small id="baseUrlOverride"></small></label><label class="field full">模型名称<input id="modelName" type="text" maxlength="150" required><small id="modelOverride"></small></label><label class="field">模型调用失败时<select id="onError"><option value="bypass">按本地规则放行</option><option value="defer">暂缓，等待后续审核</option></select></label><label class="field">模型无法判断时<select id="onUnknown"><option value="bypass">按本地规则放行</option><option value="defer">暂缓，等待后续审核</option></select></label></div><div class="credential-line"><span id="credentialDot" class="small-dot"></span><span id="credentialStatus">检查密钥配置…</span><small>密钥沿用环境变量或本机加密文件。</small></div></section>
+          </div>
+          <aside class="settings-aside"><section class="panel info-panel"><div class="eyebrow">规则生效顺序</div><ol class="flow-list"><li><span>1</span><div>来源与时效<small>仅采集酷安、微博超话</small></div></li><li><span>2</span><div>关键词规则<small>先筛掉不需要的消息</small></div></li><li><span>3</span><div>持久化去重<small>复用历史发送状态</small></div></li><li><span>4</span><div>可选 AI 审核<small>优先使用审核缓存</small></div></li><li><span>5</span><div>程序决定是否发送<small>本页试跑始终仅预览</small></div></li></ol></section><section class="panel info-panel"><div class="eyebrow">配置说明</div><p>保存后，从下一轮运行开始生效。正在执行的任务继续使用启动时的配置。</p><p>关闭 AI 后，消息仍会经过本地规则和去重处理。</p><div class="tag neutral" id="configVersion">版本 —</div></section></aside>
+        </div>
+        <div class="save-bar"><span id="dirtyStatus">所有更改已保存</span><div><button type="button" class="button subtle" id="reloadConfig">重新加载</button><button type="button" class="button secondary" id="previewRules">用当前批次试算</button><button type="submit" class="button primary" id="saveConfig">保存配置</button></div></div>
+      </form>
+    </section>
+
+    <section id="page-history" class="page" hidden><section class="panel"><div class="panel-heading"><div><h2>每次运行，都留一份记录。</h2><p>保留当时的输入、配置版本、筛选原因与耗时。</p></div><button id="refreshHistory" class="button subtle small">↻ 刷新记录</button></div><div class="table-wrap"><table class="history-table"><thead><tr><th>运行时间 / 批次</th><th>运行方式</th><th>采集 / 保留</th><th>AI 调用</th><th>耗时</th><th>状态</th><th></th></tr></thead><tbody id="historyRows"></tbody></table></div><div class="empty-state" id="emptyHistory" hidden><div class="empty-icon">◷</div><h3>还没有运行记录</h3><p>首次试跑后，即可在这里回看结果。</p></div></section></section>
+    <footer class="main-footer"><span>SHOPPING DEAL RSS</span><span>程序掌握流程，AI 辅助判断。</span></footer>
+  </main>
+</div>
+
+<dialog id="trialDialog" class="modal"><form id="trialForm"><div class="dialog-heading"><div><div class="eyebrow">PREVIEW RUN</div><h2>开始一次试跑</h2></div><button type="button" class="icon-button" data-close="trialDialog" aria-label="关闭">×</button></div><p class="dialog-intro">沿用当前已保存的规则，查看筛选效果。</p><label class="option-card"><input type="radio" name="trialSource" value="latest" checked><span><strong>获取最新线报</strong><small id="trialLimits">从两个来源采集，保留限速与查询上限。</small></span></label><label class="option-card"><input id="reuseOption" type="radio" name="trialSource" value="reuse"><span><strong>复用当前批次</strong><small>跳过采集；保留原始时间，仍执行时效检查。</small></span></label><div class="trial-ai"><div><strong>本次启用 AI 复核</strong><p>命中缓存时直接复用；未命中时会调用已配置的模型。</p></div><label class="switch"><input type="checkbox" id="trialAi" aria-label="本次启用 AI 复核"><span></span></label></div><div class="inline-note">本次仅预览，不发送消息，也不修改发送去重状态。</div><div class="dialog-actions"><button type="button" class="button subtle" data-close="trialDialog">取消</button><button class="button primary" type="submit" id="startTrial">开始试跑</button></div></form></dialog>
+
+<dialog id="ruleDialog" class="modal wide"><div class="dialog-heading"><div><div class="eyebrow">RULE PREVIEW</div><h2>这组规则，会留下哪些线报？</h2></div><button class="icon-button" data-close="ruleDialog" aria-label="关闭">×</button></div><p class="dialog-intro">使用这批数据的原始采集时间，只试算本地规则和批内去重；配置尚未保存。</p><div class="preview-stats" id="ruleStats"></div><div class="rule-preview-list" id="ruleRows"></div><div class="dialog-actions"><button class="button secondary" data-close="ruleDialog">返回调整</button></div></dialog>
+
+<dialog id="detailDialog" class="detail-drawer"><div class="dialog-heading"><div class="eyebrow">MESSAGE DETAIL</div><button class="icon-button" data-close="detailDialog" aria-label="关闭详情">×</button></div><div id="detailMeta" class="detail-meta"></div><h2 id="detailTitle"></h2><div class="detail-section"><h3>筛选过程</h3><div id="detailFlow" class="detail-flow"></div></div><div class="detail-section"><h3>线报原文</h3><div id="detailBody" class="original-content"></div></div><div class="detail-section"><a id="detailLink" class="button secondary" target="_blank" rel="noopener noreferrer">查看来源原文 ↗</a></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

@@ -1,4 +1,9 @@
 {
+  "mode": "product_only",
+  "productFilter": {
+    "configPath": "product-filter-config.json",
+    "pythonCommand": "python"
+  },
   "network": {
     "timeoutSec": 20,
     "requestDelayMs": 500,
@@ -12,12 +17,12 @@
     "maxAlertsPerRun": 2
   },
   "quality": {
-    "minScore": 88,
-    "minHistoricalDiscountPct": 30,
-    "requireHistoricalPrice": true
+    "minScore": 0,
+    "minHistoricalDiscountPct": 0,
+    "requireHistoricalPrice": false
   },
   "ai": {
-    "enabled": true,
+    "enabled": false,
     "model": "",
     "codexCommandPath": "",
     "minConfidence": 0.8,
@@ -26,7 +31,9 @@
     "timeoutSec": 30
   },
   "delivery": {
+    "enabled": false,
     "barkSecretPath": "%USERPROFILE%\\.codex\\secrets\\shopping-deal-rss-bark.bin",
+    "notificationStatePath": ".state/notifications.sqlite3",
     "statePath": "%USERPROFILE%\\.codex\\state\\shopping-deal-rss-state.json",
     "resultPath": "%USERPROFILE%\\.codex\\state\\shopping-deal-rss-last-run.json"
   },
@@ -85,7 +92,7 @@
       "id": "xianbao",
       "kind": "xianbao-detail",
       "url": "https://new.xianbao.fun/rss.php",
-      "enabled": true,
+      "enabled": false,
       "maxLookbackMinutes": 720
     }
   ]
