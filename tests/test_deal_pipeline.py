@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
-from deal_pipeline import main, run
+from deal_pipeline import main, notification, run
 from notification_delivery import BarkSender, DeliveryError, WxPusherSender
 from notification_state import NotificationState, message_record
 
@@ -21,10 +21,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASE = json.loads((ROOT / "product-filter-config.json").read_text(encoding="utf-8"))
 
 
-def item(ident=1, title="某品牌商品20元", body="下单购买", feed="kuan"):
-    return {"id": str(ident), "title": title, "content": body, "source_feed": feed,
-            "category": {"id": 17 if feed == "kuan" else 14},
-            "url": f"https://new.xianbao.fun/{feed}/{ident}.html", "published_at": time.time()}
+def item(ident=1, title="某品牌商品20元", body="下单购买", feed="kuan", content_html=None):
+    row = {"id": str(ident), "title": title, "content": body, "source_feed": feed,
+           "category": {"id": 17 if feed == "kuan" else 14},
+           "url": f"https://new.xianbao.fun/{feed}/{ident}.html", "published_at": time.time()}
+    if content_html is not None:
+        row["content_html"] = content_html
+    return row
 
 
 class Sender:
@@ -360,6 +363,36 @@ class BarkTransportTests(unittest.TestCase):
 
 
 class WxPusherTransportTests(unittest.TestCase):
+    def test_rich_notification_keeps_coupon_and_images_inside_message(self):
+        source = item(content_html=(
+            '<p>到手20元 <a data-tkl="￥coupon-code￥" href="https://example.test/buy">购买链接</a></p>'
+            '<p><img src="https://example.test/product.jpg" alt="商品图"></p>'
+            '<script>alert(1)</script><a href="javascript:alert(2)">危险</a>'))
+        message = notification(source)
+        self.assertEqual(message["content_type"], "html")
+        self.assertIn("淘口令：¥coupon-code¥", message["body"])
+        self.assertIn('src="https://example.test/product.jpg"', message["body"])
+        self.assertNotIn("<script", message["body"])
+        self.assertNotIn("javascript:", message["body"])
+
+        config = copy.deepcopy(BASE)
+        config["provider_state_path"] = None
+        config["delivery"].update(timeout_seconds=1, request_interval_seconds=.001, channel="wxpusher",
+                                  wxpusher={"endpoint": "https://wxpusher.zjiecode.com/api/send/message",
+                                            "user_list_endpoint": "https://wxpusher.zjiecode.com/api/fun/wxuser/v2",
+                                            "app_token_env": "TEST_WXPUSHER_TOKEN",
+                                            "app_token_secret_path": "missing",
+                                            "recipient_mode": "topic", "topic_ids": [48513]})
+        session = Mock()
+        session.post.return_value.status_code = 200
+        session.post.return_value.json.return_value = {"code": 1000, "data": []}
+        with patch.dict(os.environ, {"TEST_WXPUSHER_TOKEN": "AT_test-token"}):
+            WxPusherSender(config, session=session).send(message)
+        payload = session.post.call_args.kwargs["json"]
+        self.assertEqual(payload["contentType"], 2)
+        self.assertIn("product.jpg", payload["content"])
+        self.assertNotIn("url", payload)
+
     def test_all_followers_mode_discovers_app_followers_without_topic(self):
         config = copy.deepcopy(BASE)
         config["provider_state_path"] = None

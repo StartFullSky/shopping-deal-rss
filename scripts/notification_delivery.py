@@ -218,13 +218,14 @@ class WxPusherSender:
             self.throttle.release(host, lease, self.config["request_interval_seconds"])
 
     def send(self, notification):
+        rich_content = notification.get("content_type") == "html"
         base_payload = {
             "appToken": self.token,
-            "content": bounded_utf8(notification["body"], 50000)[:40000],
+            "content": bounded_utf8(notification["body"], 62000)[:39000],
             "summary": str(notification["title"] or "商品线报")[:100],
-            "contentType": 1,
+            "contentType": 2 if rich_content else 1,
         }
-        if notification.get("url"):
+        if notification.get("url") and not rich_content:
             base_payload["url"] = str(notification["url"])[:1000]
         if self.recipient_mode == "topic":
             return self._post({**base_payload, "topicIds": self.topic_ids})

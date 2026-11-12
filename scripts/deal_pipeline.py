@@ -1,6 +1,7 @@
 """Program-owned collection, rules, outbox, optional AI review and delivery."""
 
 import argparse
+import html
 import json
 import pathlib
 import sys
@@ -8,7 +9,10 @@ import time
 import uuid
 from urllib.parse import urlparse
 
+from bs4 import BeautifulSoup
+
 from deal_config import DELIVERY_DEFAULTS, load_config, revision, settings
+from deal_text import normalized
 from notification_delivery import BarkSender, DeliveryError, WxPusherSender
 from notification_state import NotificationState, message_record
 from product_filter import body_text, run as review_products, select_items
@@ -32,10 +36,56 @@ def notification(item):
     url = item.get("url") or ""
     if len(url) > 2000 or urlparse(url).scheme not in ("https", "http"):
         url = ""
-    footer = "\n原文：" + url if url else ""
-    budget = max(0, 5900 - len(footer.encode()))
-    body = body_text(item).encode()[:budget].decode("utf-8", "ignore").strip()
-    return {"title": title, "body": (body or title) + footer, "url": url}
+    content_html = str(item.get("content_html") or "").strip()
+    if not content_html:
+        footer = "\n原文：" + url if url else ""
+        budget = max(0, 5900 - len(footer.encode()))
+        body = body_text(item).encode()[:budget].decode("utf-8", "ignore").strip()
+        return {"title": title, "body": (body or title) + footer, "url": url}
+    return {"title": title, "body": rich_notification_html(title, content_html, url), "url": url, "content_type": "html"}
+
+
+def safe_http_url(value):
+    value = html.unescape(str(value or "")).strip()
+    return value if urlparse(value).scheme in ("https", "http") else ""
+
+
+def rich_notification_html(title, content_html, source_url):
+    soup = BeautifulSoup(content_html, "html.parser")
+    for tag in soup.find_all(True):
+        if tag.name not in {"p", "br", "div", "span", "strong", "b", "em", "i", "u", "s",
+                            "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li",
+                            "blockquote", "hr", "a", "img"}:
+            tag.decompose()
+            continue
+        attrs = dict(tag.attrs)
+        for key in attrs:
+            del tag[key]
+        if tag.name == "a":
+            href = safe_http_url(attrs.get("href"))
+            if href:
+                tag["href"] = href
+            coupon = normalized(attrs.get("data-tkl"))
+            if coupon:
+                coupon_line = soup.new_tag("p")
+                coupon_line.string = "淘口令：" + coupon
+                tag.insert_before(coupon_line)
+        elif tag.name == "img":
+            src = safe_http_url(attrs.get("src"))
+            if not src:
+                tag.decompose()
+            else:
+                tag["src"] = src
+                tag["referrerpolicy"] = "no-referrer"
+                if attrs.get("alt"):
+                    tag["alt"] = normalized(attrs["alt"])[:200]
+    body = soup.decode(formatter="minimal").strip()
+    if not body:
+        body = "<p>" + html.escape(normalized(BeautifulSoup(content_html, "html.parser").get_text(" ", strip=True))) + "</p>"
+    source = ""
+    if source_url:
+        source = '<p><a href="' + html.escape(source_url, quote=True) + '">查看原文</a></p>'
+    return '<h2>' + html.escape(title) + '</h2>' + body + source
 
 
 def select_local(items, config, now_ts=None):
